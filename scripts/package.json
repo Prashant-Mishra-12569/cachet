@@ -1,0 +1,18 @@
+{
+  "name": "@cachet/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "find-tokens": "tsx find-tokens.ts",
+    "smoke:grpc": "tsx grpc-smoke.ts",
+    "registry:check": "tsx registry-check.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cachet/concordium": "workspace:*",
+    "@cachet/shared": "workspace:*",
+    "@concordium/web-sdk": "12.0.2",
+    "zod": "4.6.7"
+  }
+}

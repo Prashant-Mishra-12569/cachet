@@ -1,0 +1,38 @@
+{
+  "name": "cachet",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cachet: the seal on every AI call.",
+  "author": "Prashant Mishra",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "find-tokens": "pnpm --filter @cachet/scripts find-tokens",
+    "smoke:grpc": "pnpm --filter @cachet/scripts smoke:grpc",
+    "registry:check": "pnpm --filter @cachet/scripts registry:check"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.15.0",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "tsx": "4.23.15",
+    "turbo": "2.11.11",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+/* Cachet design tokens (plan §15.3). Light first; dark mode comes later. */
+@theme {
+  --color-bg: #faf8f5;
+  --color-surface: #ffffff;
+  --color-ink: #0e0e0c;
+  --color-ink-2: #5c5a55;
+  --color-line: #e9e5de;
+  --color-seal: #0f6b4f;
+  --color-seal-soft: #e3f1ea;
+  --color-alert: #c23b2e;
+  --color-alert-soft: #fbe9e6;
+  --color-lilac: #d9d3ff;
+  --color-lilac-soft: #f4f1ff;
+  --color-gold: #c8a24a;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
