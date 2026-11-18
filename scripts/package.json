@@ -7,6 +7,7 @@
     "find-tokens": "tsx find-tokens.ts",
     "smoke:grpc": "tsx grpc-smoke.ts",
     "registry:check": "tsx registry-check.ts",
+    "check-keys": "tsx check-keys.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
