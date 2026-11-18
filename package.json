@@ -22,7 +22,8 @@
     "find-tokens": "pnpm --filter @cachet/scripts find-tokens",
     "smoke:grpc": "pnpm --filter @cachet/scripts smoke:grpc",
     "registry:check": "pnpm --filter @cachet/scripts registry:check",
-    "check-keys": "pnpm --filter @cachet/scripts check-keys"
+    "check-keys": "pnpm --filter @cachet/scripts check-keys",
+    "auth:smoke": "pnpm --filter @cachet/scripts auth:smoke"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

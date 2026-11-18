@@ -8,6 +8,7 @@
     "smoke:grpc": "tsx grpc-smoke.ts",
     "registry:check": "tsx registry-check.ts",
     "check-keys": "tsx check-keys.ts",
+    "auth:smoke": "tsx auth-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

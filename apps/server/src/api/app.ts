@@ -1,15 +1,19 @@
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
+import type { AuthService } from '../auth/service';
+import type { KvStore } from '../infra/kv';
+import { apiError } from './errors';
+import { authRoutes } from './routes/auth';
 
 export interface AppDeps {
   network: Network;
   version: string;
-}
-
-/** Plain-English JSON error shape used by every endpoint: { error: { code, message } }. */
-function errorBody(code: string, message: string) {
-  return { error: { code, message } };
+  kv: KvStore;
+  auth: AuthService;
+  webOrigin: string;
+  secureCookies: boolean;
+  trustProxy: boolean;
 }
 
 export function createApp(deps: AppDeps) {
@@ -17,21 +21,24 @@ export function createApp(deps: AppDeps) {
 
   app.use(secureHeaders());
 
-  app.get('/healthz', (c) =>
+  app.get('/healthz', async (c) =>
     c.json({
       ok: true,
       service: 'cachet',
       version: deps.version,
       network: deps.network,
       chain: NETWORK_CONFIG[deps.network].caip2,
+      redis: (await deps.kv.ping()) ? 'ok' : 'down',
     }),
   );
 
-  app.notFound((c) => c.json(errorBody('not_found', 'This page does not exist.'), 404));
+  app.route('/v1/auth', authRoutes(deps));
+
+  app.notFound((c) => apiError(c, 'not_found'));
 
   app.onError((err, c) => {
     console.error('[api] unhandled error', err);
-    return c.json(errorBody('internal', 'Something went wrong on our side. Please try again.'), 500);
+    return apiError(c, 'internal');
   });
 
   return app;

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 /** Placeholder home page. The real landing page is built in Phase 5. */
 export default function HomePage() {
   return (
@@ -9,6 +11,12 @@ export default function HomePage() {
       <p className="max-w-prose text-lg text-ink-2">
         Know in one second if an AI caller is really your bank, or a scammer.
       </p>
+      <Link
+        href="/business"
+        className="inline-flex min-h-12 w-fit items-center rounded-full border border-line px-6 font-medium transition hover:bg-surface"
+      >
+        For businesses →
+      </Link>
     </main>
   );
 }

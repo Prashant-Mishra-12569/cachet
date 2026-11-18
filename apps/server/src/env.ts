@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { normalizeAccountAddress } from '@cachet/concordium';
 import { NETWORKS } from '@cachet/shared';
 
 const ROOT_ENV = fileURLToPath(new URL('../../../.env', import.meta.url));
@@ -8,10 +9,41 @@ const ROOT_ENV = fileURLToPath(new URL('../../../.env', import.meta.url));
 const emptyToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 const optionalString = z.preprocess(emptyToUndefined, z.string().optional());
 
+/** Optional account address; if set, it must pass the address checksum (catches copy/paste damage). */
+const optionalAccount = z.preprocess(
+  emptyToUndefined,
+  z
+    .string()
+    .optional()
+    .refine((v) => v === undefined || normalizeAccountAddress(v) !== undefined, {
+      message: 'is not a valid Concordium address (checksum failed). Copy it again from the wallet.',
+    }),
+);
+
+const booleanFlag = z.preprocess(
+  (v) => (typeof v === 'string' ? ['1', 'true', 'yes'].includes(v.trim().toLowerCase()) : v),
+  z.boolean().default(false),
+);
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(8787),
+  /** The website origin (scheme + host + port). Only this origin may call cookie-based endpoints. */
+  WEB_ORIGIN: z.url().default('http://localhost:3000'),
+  /** Set to true when running behind a proxy that sets X-Forwarded-For (Railway, Fly). */
+  TRUST_PROXY: booleanFlag,
+  REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+
   CCD_NETWORK: z.enum(NETWORKS).default('testnet'),
+  CCD_GRPC_HOST: optionalString,
+  CCD_GRPC_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
+  CCD_COMPANY_ADDRESS: optionalAccount,
+  CCD_AGENT_ADDRESS: optionalAccount,
+  CCD_SPONSOR_ADDRESS: optionalAccount,
+  CACHET_TREASURY_ADDRESS: optionalAccount,
+  CCD_PERSON_ADDRESS: optionalAccount,
+  CCD_FACILITATOR_ADDRESS: optionalAccount,
+
   TELEGRAM_BOT_TOKEN: optionalString,
 });
 
@@ -23,7 +55,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
-    throw new Error(`Invalid environment variables:\n${problems}`);
+    throw new Error(`Invalid settings in .env:\n${problems}`);
   }
   return parsed.data;
 }
