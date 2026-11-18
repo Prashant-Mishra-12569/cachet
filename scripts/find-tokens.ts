@@ -7,7 +7,8 @@
 import { createGrpcClient, listPlts } from '@cachet/concordium';
 import { fail, loadRootEnv, network, optionalPort } from './env';
 
-const EURO_HINT = /eur/i;
+// Matches EURQ, EURR, eEUR and also EUDemo (the token Concordium hands out for testing).
+const EURO_HINT = /eur|^eu/i;
 
 async function main(): Promise<void> {
   loadRootEnv();
@@ -21,6 +22,9 @@ async function main(): Promise<void> {
     return;
   }
 
+  console.log(
+    'allowList = true means an account must be added to the token allow list before it can hold it.\n',
+  );
   console.table(
     tokens.map((t) => ({
       id: t.id,
