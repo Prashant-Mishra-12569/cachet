@@ -5,6 +5,8 @@ name: cachet
 services:
   postgres:
     image: postgres:18-alpine
+    # Start again automatically whenever Docker Desktop starts.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: cachet
       POSTGRES_PASSWORD: cachet
@@ -22,6 +24,7 @@ services:
 
   redis:
     image: redis:8-alpine
+    restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes']
     ports:
       - '127.0.0.1:6379:6379'
