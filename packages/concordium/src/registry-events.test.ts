@@ -58,7 +58,7 @@ describe('decodeRegistryEvent', () => {
   });
 
   it('decodes a REAL testnet Registered event, given as a Node Buffer (with the extra timestamp)', () => {
-    // Token 1294, tx 415fe1e3… on testnet (20 Nov 2026). Node Buffers share a memory pool.
+    // Token 1294, tx 415fe1e3… on testnet (19 Nov 2026). Node Buffers share a memory pool.
     const raw =
       'f0080e050000000000000335dc195c80d2f0cfabca5ee8f44e988d3de7c4e0ea89f5eb8a3579105075660000007b9d53f4a1010000';
     const decoded = decodeRegistryEvent(Buffer.from(raw, 'hex'));

@@ -11,7 +11,7 @@
  *
  * Other tags (CIS-2 Mint/Transfer, ExternalReferenceSet, MetadataSet …) are reported as `other`.
  * Trailing bytes are ignored on purpose: the live testnet contract appends a registered_at
- * timestamp (u64 ms) to Registered, which the written standard does not list (seen 20 Nov 2026).
+ * timestamp (u64 ms) to Registered, which the written standard does not list (seen 19 Nov 2026).
  */
 import { AccountAddress } from '@concordium/web-sdk';
 

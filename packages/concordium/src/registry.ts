@@ -211,7 +211,7 @@ export interface BuildAgentCardInput {
   documentationUrl?: string;
 }
 
-/** GET /v1/check-badge/{badge} (shape checked live 17–20 Nov 2026). */
+/** GET /v1/check-badge/{badge} (shape checked live 17–19 Nov 2026). */
 export interface BadgeCheck {
   badge_valid: boolean;
   checks?: Record<string, boolean>;
