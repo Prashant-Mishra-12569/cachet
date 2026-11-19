@@ -1,4 +1,9 @@
-import { AccountAddress, CcdAmount, type ConcordiumGRPCClient } from '@concordium/web-sdk';
+import {
+  AccountAddress,
+  CcdAmount,
+  CredentialRegistrationId,
+  type ConcordiumGRPCClient,
+} from '@concordium/web-sdk';
 import { TokenAmount } from '@concordium/web-sdk/plt';
 
 export interface AccountSnapshot {
@@ -20,6 +25,24 @@ export function parseAccountAddress(base58: string): AccountAddress.Type {
     return AccountAddress.fromBase58(base58.trim());
   } catch {
     throw new Error(`Not a valid Concordium account address: "${base58}"`);
+  }
+}
+
+/**
+ * Which account does this credential (registration id, 96 hex chars) belong to?
+ * Returns null if no account on chain has it.
+ */
+export async function accountOfCredential(
+  client: ConcordiumGRPCClient,
+  credIdHex: string,
+): Promise<string | null> {
+  if (!/^[0-9a-f]{96}$/i.test(credIdHex)) return null;
+  try {
+    const info = await client.getAccountInfo(CredentialRegistrationId.fromHexString(credIdHex.toLowerCase()));
+    return AccountAddress.toBase58(info.accountAddress);
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === 'NOT_FOUND') return null;
+    throw err;
   }
 }
 
