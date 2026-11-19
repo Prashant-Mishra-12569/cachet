@@ -59,6 +59,11 @@ const EnvSchema = z.object({
   CCD_VERIFIER_ADDRESS: optionalAccount,
 
   TELEGRAM_BOT_TOKEN: optionalString,
+
+  /** Concordium Agent Registry service (REST + MCP). */
+  AGENT_REGISTRY_API: z.url().default('https://agent-registry-mcp.concordium.com'),
+  /** GitHub token with ONLY the "gist" scope: temporary public hosting for Agent Cards. */
+  GIST_TOKEN: optionalString,
 });
 
 export type Env = z.infer<typeof EnvSchema>;

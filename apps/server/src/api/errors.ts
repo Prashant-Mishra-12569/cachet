@@ -36,6 +36,44 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     message:
       "This account doesn't have a verified company identity. Use an account created with your company identity (Global FinReg).",
   },
+  business_not_verified: { status: 403, message: 'Prove your company first, then add your AI caller.' },
+  agent_not_found: { status: 404, message: "We couldn't find this AI caller." },
+  agent_wrong_state: {
+    status: 409,
+    message: 'This step is already done or not ready yet. Please refresh the page.',
+  },
+  number_in_use: {
+    status: 409,
+    message: 'One of these phone numbers is already used by another verified AI caller.',
+  },
+  too_many_agents: { status: 409, message: 'You have reached the limit of AI callers for now.' },
+  tx_already_used: { status: 409, message: 'That transaction was already used for another step.' },
+  tx_not_found: {
+    status: 400,
+    message: "We couldn't find that transaction on Concordium yet. Please try again in a moment.",
+  },
+  tx_failed: { status: 400, message: 'That transaction failed on Concordium. Nothing was changed.' },
+  tx_mismatch: { status: 400, message: "That transaction doesn't match this step. Please try again." },
+  registry_rejected: {
+    status: 400,
+    message: 'The Concordium Agent Registry would reject this step. Please refresh and try again.',
+  },
+  registry_mismatch: {
+    status: 502,
+    message: 'Something looks wrong with the Agent Registry. We stopped for safety.',
+  },
+  registry_unavailable: {
+    status: 503,
+    message: "The Concordium Agent Registry isn't reachable right now. Please try again shortly.",
+  },
+  card_host_unavailable: {
+    status: 503,
+    message: "We couldn't publish your Agent Card right now. Please try again shortly.",
+  },
+  card_not_served: {
+    status: 503,
+    message: 'Your Agent Card was published but is not reachable yet. Please try again in a minute.',
+  },
   verifier_unavailable: {
     status: 503,
     message: 'Company verification is temporarily unavailable. Please try again shortly.',

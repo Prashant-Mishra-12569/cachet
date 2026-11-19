@@ -1,7 +1,16 @@
 import { serve } from '@hono/node-server';
-import { accountOfCredential, createGrpcClient, verifyAccountMessage } from '@cachet/concordium';
+import {
+  accountOfCredential,
+  createGrpcClient,
+  createRegistryClient,
+  verifyAccountMessage,
+} from '@cachet/concordium';
 import { createDb, runMigrations } from '@cachet/db';
 import pkg from '../package.json' with { type: 'json' };
+import { createGistCardHost } from './agents/card-host';
+import { createRegistryGateway } from './agents/registry-gateway';
+import { createAgentRepo } from './agents/repo';
+import { createAgentService } from './agents/service';
 import { createApp } from './api/app';
 import { createAuthService } from './auth/service';
 import { createBot, startBotPolling } from './bot/bot';
@@ -58,6 +67,17 @@ const companyProof = createCompanyProofService({
   accountOfCredential: (credId) => accountOfCredential(grpc, credId),
 });
 
+const registry = createRegistryClient({ baseUrl: env.AGENT_REGISTRY_API });
+const cardHost = env.GIST_TOKEN ? createGistCardHost({ token: env.GIST_TOKEN }) : null;
+if (!cardHost) console.warn('[agents] GIST_TOKEN not set: Agent Cards cannot be published yet.');
+const agents = createAgentService({
+  agents: createAgentRepo(database.db),
+  businesses: repo,
+  gateway: createRegistryGateway({ registry, grpc, network: env.CCD_NETWORK }),
+  cardHost,
+  network: env.CCD_NETWORK,
+});
+
 const app = createApp({
   network: env.CCD_NETWORK,
   version: pkg.version,
@@ -65,6 +85,8 @@ const app = createApp({
   auth,
   repo,
   companyProof,
+  agents,
+  registryUrl: registry.baseUrl,
   webOrigin: env.WEB_ORIGIN,
   secureCookies: env.NODE_ENV === 'production',
   trustProxy: env.TRUST_PROXY,
@@ -73,6 +95,16 @@ const app = createApp({
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`[api] listening on http://localhost:${info.port} (${env.CCD_NETWORK})`);
+});
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `[api] port ${env.PORT} is already in use. Is another "pnpm dev" still running? Stop it first.`,
+    );
+  } else {
+    console.error('[api] server error:', err);
+  }
+  process.exit(1);
 });
 
 if (!(await verifier.health())) {

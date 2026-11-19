@@ -1,4 +1,4 @@
-import type { WalletApi } from '@concordium/browser-wallet-api-helpers';
+import type { SmartContractParameters, WalletApi } from '@concordium/browser-wallet-api-helpers';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
 
 /** A wallet problem we can explain to the person in plain words. */
@@ -81,6 +81,52 @@ export async function requestProof(network: Network, requestJson: unknown): Prom
     throw new WalletError('rejected', 'The proof was cancelled in your wallet. Try again when ready.');
   }
   return JSON.parse(JSON.stringify(presentation)) as unknown;
+}
+
+/** A contract update prepared (and pre-checked) by the Cachet server. */
+export interface WalletTx {
+  contract: { index: number; subindex: number };
+  receiveName: string;
+  parameterJson: unknown;
+  schemaBase64: string;
+  maxEnergy: number;
+}
+
+/**
+ * Ask the wallet to approve and send a smart-contract transaction from `expectedAccount`.
+ * The wallet encodes the parameter with the contract's schema. Returns the transaction hash.
+ */
+export async function sendContractUpdate(
+  network: Network,
+  expectedAccount: string,
+  tx: WalletTx,
+): Promise<string> {
+  const { wallet, account } = await connectWallet(network);
+  if (account !== expectedAccount) {
+    throw new WalletError(
+      'no_account',
+      'Your wallet has a different account selected. Select the account you signed in with and try again.',
+    );
+  }
+  // Small value types only (no WebAssembly), loaded on demand.
+  const { AccountTransactionType, CcdAmount, ContractAddress, Energy, ReceiveName } =
+    await import('@concordium/web-sdk/types');
+  try {
+    return await wallet.sendTransaction(
+      account,
+      AccountTransactionType.Update,
+      {
+        amount: CcdAmount.zero(),
+        address: ContractAddress.create(tx.contract.index, tx.contract.subindex),
+        receiveName: ReceiveName.fromString(tx.receiveName),
+        maxContractExecutionEnergy: Energy.create(tx.maxEnergy),
+      },
+      tx.parameterJson as SmartContractParameters,
+      tx.schemaBase64,
+    );
+  } catch {
+    throw new WalletError('rejected', 'The transaction was cancelled in your wallet. Nothing was sent.');
+  }
 }
 
 /** Ask the wallet to sign a plain-text message. Not a transaction: free and moves nothing. */

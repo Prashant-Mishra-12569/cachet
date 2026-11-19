@@ -1,3 +1,8 @@
+import type { BadgeCheck, BuiltTx, ConfirmedUpdate, RegistryEvent } from '@cachet/concordium';
+import { createMemoryCardHost, type CardHost } from '../agents/card-host';
+import { GatewayError, type RegistryGateway } from '../agents/registry-gateway';
+import { createMemoryAgentRepo } from '../agents/repo';
+import { createAgentService } from '../agents/service';
 import { createAuthService, type VerifyMessage } from '../auth/service';
 import { createCompanyProofService } from '../business/company-proof';
 import { createMemoryBusinessRepo } from '../business/repo';
@@ -85,6 +90,9 @@ export function makeTestApp(
     verifier?: VerifierClient;
     /** Who owns a credential on chain. Default: the signed-in test ACCOUNT. */
     accountOfCredential?: (credId: string) => Promise<string | null>;
+    gateway?: RegistryGateway;
+    /** Card host; pass null to simulate "not configured". */
+    cardHost?: CardHost | null;
   } = {},
 ) {
   const clock = { t: Date.parse('2026-11-19T10:00:00Z') };
@@ -107,6 +115,18 @@ export function makeTestApp(
     accountOfCredential: options.accountOfCredential ?? (async () => ACCOUNT),
     now,
   });
+  const chain = fakeChain();
+  const cardHost = options.cardHost === undefined ? createMemoryCardHost() : options.cardHost;
+  const agentRepo = createMemoryAgentRepo();
+  const agents = createAgentService({
+    agents: agentRepo,
+    businesses: repo,
+    gateway: options.gateway ?? chain.gateway,
+    cardHost,
+    network: 'testnet',
+    servedTimeoutMs: 0,
+    sleep: async () => undefined,
+  });
   const app = createApp({
     network: 'testnet',
     version: 'test',
@@ -114,11 +134,13 @@ export function makeTestApp(
     auth,
     repo,
     companyProof,
+    agents,
+    registryUrl: 'https://registry.test',
     webOrigin: WEB_ORIGIN,
     secureCookies: false,
     trustProxy: false,
   });
-  return { app, kv, clock, repo };
+  return { app, kv, clock, repo, chain, cardHost, agentRepo };
 }
 
 export function postJson(path: string, body: unknown, headers: Record<string, string> = {}) {
@@ -140,4 +162,112 @@ export async function signIn(app: ReturnType<typeof makeTestApp>['app'], account
   const match = /cachet_session=([^;]+)/.exec(res.headers.get('set-cookie') ?? '');
   if (!match?.[1]) throw new Error('sign-in failed in test');
   return `cachet_session=${match[1]}`;
+}
+
+export const REGISTRY = { index: 12802, subindex: 0 };
+
+/**
+ * Fake Agent Registry + chain. Tests "submit" transactions with chain.addTx(hash, …); the gateway's
+ * confirm() then behaves like the real one (sender + entrypoint checks, decoded events).
+ */
+export function fakeChain() {
+  const txs = new Map<
+    string,
+    { sender: string; receiveName: string; events: RegistryEvent[]; failed?: boolean }
+  >();
+  const built = (receiveName: string, parameterJson: unknown): BuiltTx => ({
+    contract: REGISTRY,
+    receiveName,
+    parameterJson,
+    parameterHex: '00',
+    suggestedEnergy: 30_000,
+  });
+  const gateway: RegistryGateway = {
+    buildRegister: async () => built('CIS-8004.register', { agent_uri: { None: [] } }),
+    buildSetAgentUri: async (tokenId, agentUri, metadataHash) =>
+      built('CIS-8004.setAgentURI', {
+        token_id: tokenId.toString(),
+        agent_uri: agentUri,
+        metadata_hash: metadataHash,
+      }),
+    buildCard: async (input) =>
+      JSON.stringify(
+        {
+          name: input.name,
+          url: input.agentUri,
+          skills: input.skills,
+          capabilities: {
+            extensions: [
+              {
+                uri: 'https://docs.concordium.com/a2a-extensions/concordium-badge/v1',
+                params: {
+                  tokenAddress: `ccd:x/cis-2:BADGE${input.tokenId}`,
+                  owner: { account: input.ownerAccount },
+                },
+              },
+            ],
+          },
+          registrations: [{ agentId: Number(input.tokenId) }],
+        },
+        null,
+        2,
+      ),
+    tokenAddress: async (tokenId) => `BADGE${tokenId}`,
+    toWalletTx: async (b) => ({ ...b, schemaBase64: 'c2NoZW1h', maxEnergy: b.suggestedEnergy }),
+    async confirm(txHash, sender, receiveName): Promise<ConfirmedUpdate> {
+      const tx = txs.get(txHash);
+      if (!tx) throw new GatewayError('tx_not_found', 'unknown tx');
+      if (tx.failed) throw new GatewayError('tx_failed', 'rejected');
+      if (tx.sender !== sender) throw new GatewayError('tx_mismatch', 'wrong sender');
+      if (tx.receiveName !== receiveName) throw new GatewayError('tx_mismatch', 'wrong entrypoint');
+      return { txHash, blockHash: 'b'.repeat(64), events: tx.events };
+    },
+    checkBadge: async (): Promise<BadgeCheck> => ({ badge_valid: true, checks: { status_active: true } }),
+  };
+  return {
+    gateway,
+    addTx(
+      hash: string,
+      tx: { sender: string; receiveName: string; events: RegistryEvent[]; failed?: boolean },
+    ) {
+      txs.set(hash, tx);
+    },
+    registerTx(hash: string, owner: string, tokenId: bigint) {
+      txs.set(hash, {
+        sender: owner,
+        receiveName: 'CIS-8004.register',
+        events: [
+          { type: 'other', tag: 254 },
+          { type: 'Registered', tokenId, owner, agentUri: null, metadataHash: null },
+          { type: 'AgentWalletSet', tokenId, wallet: owner },
+        ],
+      });
+    },
+    setUriTx(hash: string, owner: string, tokenId: bigint, agentUri: string, metadataHash: string) {
+      txs.set(hash, {
+        sender: owner,
+        receiveName: 'CIS-8004.setAgentURI',
+        events: [{ type: 'URIUpdated', tokenId, agentUri, metadataHash }],
+      });
+    },
+  };
+}
+
+/** Sign in and prove the company (through the real routes, fake verifier). Returns the cookie. */
+export async function signInAsCompany(app: ReturnType<typeof makeTestApp>['app'], account = ACCOUNT) {
+  const cookie = await signIn(app, account);
+  const started = (await (
+    await app.request(postJson('/v1/business/proof/request', {}, { cookie }))
+  ).json()) as {
+    proofId: string;
+  };
+  const res = await app.request(
+    postJson(
+      '/v1/business/proof/verify',
+      { proofId: started.proofId, presentation: companyPresentation() },
+      { cookie },
+    ),
+  );
+  if (res.status !== 200) throw new Error(`company proof failed in test: ${res.status}`);
+  return cookie;
 }

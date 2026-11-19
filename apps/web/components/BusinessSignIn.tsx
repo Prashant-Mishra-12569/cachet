@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { NETWORK } from '@/lib/config';
 import { connectWallet, signWithWallet, WALLET_SETUP_URL, WalletError } from '@/lib/wallet';
-import { CompanyProof } from './CompanyProof';
+import { BusinessDashboard } from './BusinessDashboard';
 
 type Me = { account: string; expiresAt: string };
 type Step = 'checking' | 'signed-out' | 'connecting' | 'approving' | 'verifying' | 'signed-in';
@@ -73,7 +73,7 @@ export function BusinessSignIn() {
   const busy = step === 'connecting' || step === 'approving' || step === 'verifying';
 
   return (
-    <section className="w-full max-w-md rounded-[20px] border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/.04),0_8px_24px_rgb(0_0_0/.06)] sm:p-8">
+    <section className="w-full max-w-lg rounded-[20px] border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/.04),0_8px_24px_rgb(0_0_0/.06)] sm:p-8">
       {step === 'signed-in' && me ? (
         <div className="flex flex-col gap-4">
           <p className="inline-flex w-fit items-center gap-2 rounded-full bg-seal-soft px-3 py-1 text-sm font-medium text-seal">
@@ -85,7 +85,7 @@ export function BusinessSignIn() {
               Account <span className="font-mono text-ink">{shortAccount(me.account)}</span>
             </p>
           </div>
-          <CompanyProof />
+          <BusinessDashboard account={me.account} />
           <button
             type="button"
             onClick={signOut}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { NETWORK } from '@/lib/config';
 import { requestProof, WalletError } from '@/lib/wallet';
@@ -14,15 +14,9 @@ export interface BusinessView {
   requestTxUrl: string;
 }
 
-type Step = 'loading' | 'unproven' | 'preparing' | 'approving' | 'verifying' | 'proven';
+type Step = 'unproven' | 'preparing' | 'approving' | 'verifying';
 
-const STEP_TEXT: Partial<Record<Step, string>> = {
-  preparing: 'Preparing your proof request…',
-  approving: 'Approve the proof in your wallet. Choose the account you signed in with.',
-  verifying: 'Checking your proof on Concordium…',
-};
-
-function countryName(code: string): string {
+export function countryName(code: string): string {
   try {
     return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
   } catch {
@@ -30,20 +24,21 @@ function countryName(code: string): string {
   }
 }
 
-export function CompanyProof() {
-  const [step, setStep] = useState<Step>('loading');
-  const [business, setBusiness] = useState<BusinessView | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const STEP_TEXT: Partial<Record<Step, string>> = {
+  preparing: 'Preparing your proof request…',
+  approving: 'Approve the proof in your wallet. Choose the account you signed in with.',
+  verifying: 'Checking your proof on Concordium…',
+};
 
-  useEffect(() => {
-    api
-      .get<{ business: BusinessView | null }>('/v1/business/me')
-      .then(({ business: b }) => {
-        setBusiness(b);
-        setStep(b ? 'proven' : 'unproven');
-      })
-      .catch(() => setStep('unproven'));
-  }, []);
+export function CompanyProof({
+  business,
+  onProven,
+}: {
+  business: BusinessView | null;
+  onProven: (b: BusinessView) => void;
+}) {
+  const [step, setStep] = useState<Step>('unproven');
+  const [error, setError] = useState<string | null>(null);
 
   const prove = useCallback(async () => {
     setError(null);
@@ -59,8 +54,8 @@ export function CompanyProof() {
         proofId,
         presentation,
       });
-      setBusiness(result.business);
-      setStep('proven');
+      setStep('unproven');
+      onProven(result.business);
     } catch (err) {
       setError(
         err instanceof WalletError || err instanceof ApiError
@@ -69,11 +64,9 @@ export function CompanyProof() {
       );
       setStep('unproven');
     }
-  }, []);
+  }, [onProven]);
 
-  if (step === 'loading') return <p className="text-sm text-ink-2">Loading…</p>;
-
-  if (step === 'proven' && business) {
+  if (business) {
     return (
       <div className="flex flex-col gap-3 rounded-2xl bg-seal-soft p-4">
         <p className="text-sm font-medium text-seal">
