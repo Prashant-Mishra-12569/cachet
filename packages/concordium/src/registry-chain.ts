@@ -13,7 +13,9 @@ import {
   ModuleReference,
   Parameter,
   ReceiveName,
+  ReturnValue,
   TransactionHash,
+  deserializeReceiveReturnValue,
   getEmbeddedModuleSchema,
   serializeUpdateContractParameters,
   type ConcordiumGRPCClient,
@@ -76,6 +78,69 @@ export async function simulateUpdate(
   return {
     ok: false,
     reason: JSON.stringify(result.reason, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
+  };
+}
+
+/** An agent as the CIS-8004 contract sees it right now. */
+export interface OnChainAgent {
+  tokenId: bigint;
+  owner: string;
+  agentUri: string | null;
+  /** hex */
+  metadataHash: string | null;
+  agentWallet: string | null;
+  status: 'Active' | 'Revoked';
+}
+
+const someOf = <T>(opt: unknown): T | null => {
+  const o = opt as { Some?: [T]; None?: unknown } | null;
+  return o && Array.isArray(o.Some) ? (o.Some[0] as T) : null;
+};
+
+/**
+ * Read an agent straight from the registry contract (agentOf), decoded with the contract's own schema.
+ * Returns null if the agent does not exist. (Live testnet returns Option::None for unknown ids,
+ * where the written standard says "reject": both are handled.)
+ */
+export async function readAgentOnChain(
+  client: ConcordiumGRPCClient,
+  input: { contract: ContractRefInput; schema: ContractSchema; tokenId: bigint },
+): Promise<OnChainAgent | null> {
+  const param = new Uint8Array(9);
+  const view = new DataView(param.buffer);
+  view.setUint8(0, 8);
+  view.setBigUint64(1, input.tokenId, true);
+  const result = await client.invokeContract({
+    contract: ContractAddress.create(input.contract.index, input.contract.subindex),
+    method: ReceiveName.fromString('CIS-8004.agentOf'),
+    parameter: Parameter.fromBuffer(param.buffer),
+    energy: Energy.create(100_000),
+  });
+  if (result.tag !== 'success') return null;
+  if (!result.returnValue) throw new Error('agentOf returned no value');
+  const decoded = deserializeReceiveReturnValue(
+    ReturnValue.toBuffer(result.returnValue).slice().buffer,
+    input.schema.buffer,
+    ContractName.fromString('CIS-8004'),
+    EntrypointName.fromString('agentOf'),
+  ) as unknown;
+  // Live contract: Option<AgentView>. Spec: AgentView. Accept both.
+  const agent = (someOf<Record<string, unknown>>(decoded) ??
+    ((decoded as { owner_account?: unknown } | null)?.owner_account ? decoded : null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!agent) return null;
+
+  const hashBytes = someOf<(number | string)[]>(agent['metadata_hash']);
+  const status = agent['status'] as Record<string, unknown> | undefined;
+  return {
+    tokenId: input.tokenId,
+    owner: String(agent['owner_account']),
+    agentUri: someOf<string>(agent['agent_uri']),
+    metadataHash: hashBytes ? Buffer.from(hashBytes.map(Number)).toString('hex') : null,
+    agentWallet: someOf<string>(agent['agent_wallet']),
+    status: status && 'Active' in status ? 'Active' : 'Revoked',
   };
 }
 
