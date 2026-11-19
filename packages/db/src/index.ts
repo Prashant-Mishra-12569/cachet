@@ -7,7 +7,7 @@ import * as schema from './schema';
 export * from './schema';
 export { schema };
 /** Query helpers, re-exported so apps use the same drizzle-orm copy as the schema. */
-export { and, arrayOverlaps, desc, eq, ne, sql } from 'drizzle-orm';
+export { and, arrayOverlaps, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 export type Db = NodePgDatabase<typeof schema>;
 

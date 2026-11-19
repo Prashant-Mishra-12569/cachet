@@ -6,3 +6,4 @@ export * from './keys';
 export * from './signatures';
 export * from './registry-events';
 export * from './registry-chain';
+export * from './tx-sender';
