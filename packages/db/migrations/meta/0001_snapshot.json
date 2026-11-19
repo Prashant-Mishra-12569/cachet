@@ -1,0 +1,344 @@
+{
+  "id": "fc63a720-9510-403b-97dd-741b4f965392",
+  "prevId": "a0fe2110-94fb-48a7-9d1f-5016099edff2",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.agents": {
+      "name": "agents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "business_id": {
+          "name": "business_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purposes": {
+          "name": "purposes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en'"
+        },
+        "calling_numbers": {
+          "name": "calling_numbers",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "agent_account": {
+          "name": "agent_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "agent_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "token_id": {
+          "name": "token_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "badge": {
+          "name": "badge",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "register_tx": {
+          "name": "register_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agent_wallet": {
+          "name": "agent_wallet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agent_uri": {
+          "name": "agent_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata_hash": {
+          "name": "metadata_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_json": {
+          "name": "card_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_tx": {
+          "name": "card_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agents_business_idx": {
+          "name": "agents_business_idx",
+          "columns": [
+            {
+              "expression": "business_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_calling_numbers_idx": {
+          "name": "agents_calling_numbers_idx",
+          "columns": [
+            {
+              "expression": "calling_numbers",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agents_business_id_businesses_id_fk": {
+          "name": "agents_business_id_businesses_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "businesses",
+          "columnsFrom": ["business_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "agents_token_id_unique": {
+          "name": "agents_token_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["token_id"]
+        },
+        "agents_register_tx_unique": {
+          "name": "agents_register_tx_unique",
+          "nullsNotDistinct": false,
+          "columns": ["register_tx"]
+        },
+        "agents_card_tx_unique": {
+          "name": "agents_card_tx_unique",
+          "nullsNotDistinct": false,
+          "columns": ["card_tx"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "agent_name_length": {
+          "name": "agent_name_length",
+          "value": "char_length(\"agents\".\"name\") between 1 and 80"
+        },
+        "agent_description_length": {
+          "name": "agent_description_length",
+          "value": "char_length(\"agents\".\"description\") between 1 and 500"
+        },
+        "agent_language_iso": {
+          "name": "agent_language_iso",
+          "value": "\"agents\".\"language\" ~ '^[a-z]{2}$'"
+        },
+        "agent_purposes_nonempty": {
+          "name": "agent_purposes_nonempty",
+          "value": "cardinality(\"agents\".\"purposes\") >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.businesses": {
+      "name": "businesses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "concordium_account": {
+          "name": "concordium_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "legal_name": {
+          "name": "legal_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "legal_country": {
+          "name": "legal_country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proof_tx": {
+          "name": "proof_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_tx": {
+          "name": "request_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "business_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "never_calls": {
+          "name": "never_calls",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "businesses_concordium_account_unique": {
+          "name": "businesses_concordium_account_unique",
+          "nullsNotDistinct": false,
+          "columns": ["concordium_account"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "legal_country_iso2": {
+          "name": "legal_country_iso2",
+          "value": "\"businesses\".\"legal_country\" ~ '^[A-Z]{2}$'"
+        },
+        "legal_name_length": {
+          "name": "legal_name_length",
+          "value": "char_length(\"businesses\".\"legal_name\") between 1 and 200"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.agent_status": {
+      "name": "agent_status",
+      "schema": "public",
+      "values": ["draft", "registered", "active", "revoked"]
+    },
+    "public.business_status": {
+      "name": "business_status",
+      "schema": "public",
+      "values": ["active", "suspended"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
