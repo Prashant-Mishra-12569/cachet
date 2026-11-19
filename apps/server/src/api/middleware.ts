@@ -1,7 +1,25 @@
 import type { MiddlewareHandler } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
+import type { AuthService } from '../auth/service';
 import type { KvStore } from '../infra/kv';
 import { apiError } from './errors';
+
+/** Hono context for routes behind requireSession: c.var.account is the signed-in account. */
+export type SessionEnv = { Variables: { account: string } };
+
+export const sessionCookieName = (secure: boolean) => (secure ? '__Host-cachet_session' : 'cachet_session');
+
+/** Only signed-in businesses get through; the account is put on c.var.account. */
+export function requireSession(auth: AuthService, secureCookies: boolean): MiddlewareHandler<SessionEnv> {
+  const cookieName = sessionCookieName(secureCookies);
+  return async (c, next) => {
+    const session = await auth.getSession(getCookie(c, cookieName));
+    if (!session) return apiError(c, 'not_signed_in');
+    c.set('account', session.account);
+    return next();
+  };
+}
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -43,12 +61,17 @@ export function clientIp(c: Parameters<MiddlewareHandler>[0], trustProxy: boolea
   }
 }
 
-/** Fixed-window rate limit per client IP. */
-export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
+/**
+ * Fixed-window rate limit. Keyed by client IP, or by signed-in account when `byAccount` is set
+ * (use that for anything that costs us money on-chain).
+ */
+export function rateLimit(
+  options: RateLimitOptions & { byAccount?: boolean },
+): MiddlewareHandler<SessionEnv> {
   return async (c, next) => {
-    const ip = clientIp(c, options.trustProxy);
+    const who = options.byAccount ? `acct:${c.var.account}` : clientIp(c, options.trustProxy);
     const window = Math.floor(Date.now() / 1000 / options.windowSeconds);
-    const count = await options.kv.incr(`rl:${options.name}:${ip}:${window}`, options.windowSeconds);
+    const count = await options.kv.incr(`rl:${options.name}:${who}:${window}`, options.windowSeconds);
     if (count > options.limit) {
       c.header('Retry-After', String(options.windowSeconds));
       return apiError(c, 'rate_limited');

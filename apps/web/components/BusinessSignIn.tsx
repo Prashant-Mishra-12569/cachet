@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { NETWORK } from '@/lib/config';
 import { connectWallet, signWithWallet, WALLET_SETUP_URL, WalletError } from '@/lib/wallet';
+import { CompanyProof } from './CompanyProof';
 
 type Me = { account: string; expiresAt: string };
 type Step = 'checking' | 'signed-out' | 'connecting' | 'approving' | 'verifying' | 'signed-in';
@@ -84,7 +85,7 @@ export function BusinessSignIn() {
               Account <span className="font-mono text-ink">{shortAccount(me.account)}</span>
             </p>
           </div>
-          <p className="text-sm text-ink-2">Next: prove your company. This step is coming soon.</p>
+          <CompanyProof />
           <button
             type="button"
             onClick={signOut}
@@ -98,7 +99,8 @@ export function BusinessSignIn() {
           <div>
             <h2 className="text-xl font-semibold">Sign in for businesses</h2>
             <p className="mt-1 text-ink-2">
-              Use your Concordium Wallet. You&apos;ll approve a sign-in message. No payment, no fee.
+              Use your Concordium Wallet with your company account. You&apos;ll approve a sign-in message. No
+              payment, no fee.
             </p>
           </div>
 

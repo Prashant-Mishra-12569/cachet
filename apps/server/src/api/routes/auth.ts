@@ -5,7 +5,7 @@ import { parseAccountSignature } from '@cachet/concordium';
 import { AuthError, type AuthService } from '../../auth/service';
 import type { KvStore } from '../../infra/kv';
 import { apiError } from '../errors';
-import { rateLimit, requireSameOrigin } from '../middleware';
+import { rateLimit, requireSameOrigin, sessionCookieName } from '../middleware';
 
 export interface AuthRouteDeps {
   auth: AuthService;
@@ -15,8 +15,6 @@ export interface AuthRouteDeps {
   secureCookies: boolean;
   trustProxy: boolean;
 }
-
-export const sessionCookieName = (secure: boolean) => (secure ? '__Host-cachet_session' : 'cachet_session');
 
 const ChallengeBody = z.object({ account: z.string().min(1).max(100) });
 const VerifyBody = z.object({

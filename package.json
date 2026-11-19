@@ -17,13 +17,14 @@
     "test": "turbo run test",
     "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
     "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
-    "db:up": "docker compose -f infra/docker-compose.yml up -d",
-    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "db:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
     "find-tokens": "pnpm --filter @cachet/scripts find-tokens",
     "smoke:grpc": "pnpm --filter @cachet/scripts smoke:grpc",
     "registry:check": "pnpm --filter @cachet/scripts registry:check",
     "check-keys": "pnpm --filter @cachet/scripts check-keys",
-    "auth:smoke": "pnpm --filter @cachet/scripts auth:smoke"
+    "auth:smoke": "pnpm --filter @cachet/scripts auth:smoke",
+    "proof:smoke": "pnpm --filter @cachet/scripts proof:smoke"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

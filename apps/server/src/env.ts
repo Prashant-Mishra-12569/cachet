@@ -33,6 +33,19 @@ const EnvSchema = z.object({
   /** Set to true when running behind a proxy that sets X-Forwarded-For (Railway, Fly). */
   TRUST_PROXY: booleanFlag,
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+  DATABASE_URL: z.string().min(1).default('postgres://cachet:cachet@localhost:5432/cachet'),
+
+  /** Concordium Credential Verification Service (Verify & Access). */
+  VERIFIER_URL: z.url().default('http://localhost:8000'),
+  VERIFIER_HEALTH_URL: z.url().default('http://localhost:8001/health'),
+  /** Identity provider indexes trusted to issue COMPANY identities. Testnet: 4 = Global FinReg. */
+  COMPANY_ID_ISSUERS: z
+    .string()
+    .default('4')
+    .transform((v) => v.split(',').map((s) => Number(s.trim())))
+    .refine((list) => list.length > 0 && list.every((n) => Number.isInteger(n) && n >= 0), {
+      message: 'must be a comma-separated list of identity provider numbers, e.g. "4"',
+    }),
 
   CCD_NETWORK: z.enum(NETWORKS).default('testnet'),
   CCD_GRPC_HOST: optionalString,

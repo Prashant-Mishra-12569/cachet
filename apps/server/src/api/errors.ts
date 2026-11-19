@@ -20,6 +20,26 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
   },
   bad_signature: { status: 401, message: "The wallet approval didn't match this account. Please try again." },
   not_signed_in: { status: 401, message: 'Please sign in first.' },
+  proof_expired: { status: 400, message: 'This proof request expired. Please start again.' },
+  proof_failed: { status: 400, message: "Your wallet's proof couldn't be verified. Please try again." },
+  proof_invalid: {
+    status: 400,
+    message: "Your wallet's proof wasn't in the expected form. Please try again.",
+  },
+  proof_wrong_account: {
+    status: 400,
+    message:
+      'The proof came from a different account than the one you signed in with. Sign in with your company account and try again.',
+  },
+  proof_not_company: {
+    status: 400,
+    message:
+      "This account doesn't have a verified company identity. Use an account created with your company identity (Global FinReg).",
+  },
+  verifier_unavailable: {
+    status: 503,
+    message: 'Company verification is temporarily unavailable. Please try again shortly.',
+  },
   forbidden_origin: { status: 403, message: 'This request must come from the Cachet website.' },
   not_found: { status: 404, message: 'This page does not exist.' },
   rate_limited: { status: 429, message: 'Too many tries. Please wait a few minutes and try again.' },

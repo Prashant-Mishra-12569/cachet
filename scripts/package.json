@@ -9,6 +9,7 @@
     "registry:check": "tsx registry-check.ts",
     "check-keys": "tsx check-keys.ts",
     "auth:smoke": "tsx auth-smoke.ts",
+    "proof:smoke": "tsx proof-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

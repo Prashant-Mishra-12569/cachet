@@ -4,7 +4,7 @@ import { NETWORK_CONFIG, type Network } from '@cachet/shared';
 /** A wallet problem we can explain to the person in plain words. */
 export class WalletError extends Error {
   constructor(
-    readonly code: 'not_installed' | 'locked' | 'wrong_network' | 'no_account' | 'rejected',
+    readonly code: 'not_installed' | 'locked' | 'wrong_network' | 'no_account' | 'rejected' | 'outdated',
     message: string,
   ) {
     super(message);
@@ -57,6 +57,30 @@ export async function connectWallet(network: Network): Promise<{ wallet: WalletA
     throw new WalletError('no_account', 'Connect at least one account in your wallet, then try again.');
   }
   return { wallet, account };
+}
+
+/**
+ * Ask the wallet for a zero-knowledge proof (Verify & Access, V1 request from our server).
+ * The extension serializes the request itself, so the server's JSON is passed through as-is,
+ * and the returned presentation is sent back as JSON (it has toJSON()).
+ */
+export async function requestProof(network: Network, requestJson: unknown): Promise<unknown> {
+  const { wallet } = await connectWallet(network);
+  if (typeof wallet.requestVerifiablePresentationV1 !== 'function') {
+    throw new WalletError(
+      'outdated',
+      'Please update your Concordium Wallet to the latest version and try again.',
+    );
+  }
+  let presentation: unknown;
+  try {
+    presentation = await wallet.requestVerifiablePresentationV1(
+      requestJson as Parameters<typeof wallet.requestVerifiablePresentationV1>[0],
+    );
+  } catch {
+    throw new WalletError('rejected', 'The proof was cancelled in your wallet. Try again when ready.');
+  }
+  return JSON.parse(JSON.stringify(presentation)) as unknown;
 }
 
 /** Ask the wallet to sign a plain-text message. Not a transaction: free and moves nothing. */
