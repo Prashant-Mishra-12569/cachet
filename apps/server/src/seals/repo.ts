@@ -1,6 +1,5 @@
 import {
   and,
-  anchors,
   creditPurchases,
   desc,
   eq,
@@ -8,7 +7,6 @@ import {
   sealCredits,
   seals,
   sql,
-  type AnchorRow,
   type Db,
   type SealRow,
 } from '@cachet/db';
@@ -23,12 +21,6 @@ export interface LedgerItemInput {
 
 export type IssueResult =
   { ok: true; creditsLeft: number } | { ok: false; reason: 'no_credits' | 'conflict' };
-
-export interface AnchorInfo {
-  itemHash: string;
-  leafIndex: number | null;
-  anchor: AnchorRow | null;
-}
 
 export interface SealRepo {
   /**
@@ -58,7 +50,6 @@ export interface SealRepo {
   }): Promise<boolean>;
   /** The most recent credit purchase transaction for this agent (seal.payment.ref). */
   latestPurchaseTx(agentId: string): Promise<string | null>;
-  anchorInfo(kind: LedgerItemInput['kind'], refId: string): Promise<AnchorInfo | null>;
 }
 
 const isUniqueViolation = (err: unknown) => {
@@ -161,17 +152,6 @@ export function createSealRepo(db: Db): SealRepo {
         .limit(1);
       return rows[0]?.tx ?? null;
     },
-
-    async anchorInfo(kind, refId) {
-      const rows = await db
-        .select({ item: ledgerItems, anchor: anchors })
-        .from(ledgerItems)
-        .leftJoin(anchors, eq(ledgerItems.anchorId, anchors.id))
-        .where(and(eq(ledgerItems.kind, kind), eq(ledgerItems.refId, refId)))
-        .limit(1);
-      const r = rows[0];
-      return r ? { itemHash: r.item.itemHash, leafIndex: r.item.leafIndex, anchor: r.anchor } : null;
-    },
   };
 }
 
@@ -234,10 +214,6 @@ export function createMemorySealRepo() {
     },
     latestPurchaseTx: async (agentId) =>
       purchases.filter((p) => p.agentId === agentId).at(-1)?.txHash ?? null,
-    async anchorInfo(kind, refId) {
-      const item = ledger.find((l) => l.kind === kind && l.refId === refId);
-      return item ? { itemHash: item.itemHash, leafIndex: item.leafIndex, anchor: null } : null;
-    },
   };
   return repo;
 }

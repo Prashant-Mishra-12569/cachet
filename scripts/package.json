@@ -12,6 +12,7 @@
     "proof:smoke": "tsx proof-smoke.ts",
     "gen-secrets": "tsx gen-secrets.ts",
     "seal:smoke": "tsx seal-smoke.ts",
+    "anchor:verify": "tsx anchor-verify.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,9 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import {
   accountOfCredential,
   createGrpcClient,
   createCachedMessageVerifier,
   createRegistryClient,
+  createTxSender,
+  loadAccountKey,
   verifyAccountMessage,
 } from '@cachet/concordium';
 import { loadSealSigningKey } from '@cachet/shared/seal';
@@ -24,7 +27,8 @@ import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
-import { WORKER_READY } from './worker/index';
+import { createAnchorRepo } from './worker/anchor-repo';
+import { createAnchorWorker } from './worker/anchoring';
 
 let env;
 try {
@@ -84,6 +88,7 @@ const agents = createAgentService({
   network: env.CCD_NETWORK,
 });
 
+const anchorRepo = createAnchorRepo(database.db);
 const signingKey = loadSealSigningKey(env.SEAL_SIGNING_KEY);
 const agentKeys = createCachedMessageVerifier(grpc);
 const seals = createSealService({
@@ -92,6 +97,7 @@ const seals = createSealService({
   businesses: repo,
   gateway,
   verifyMessage: agentKeys,
+  inclusion: (kind, refId) => anchorRepo.inclusion(kind, refId),
   prefetchAccount: agentKeys.prefetch,
   kv,
   signingKey,
@@ -160,7 +166,40 @@ if (bot) {
 }
 
 console.log(`[facilitator] ${FACILITATOR_READY ? 'ready' : 'not built yet (Phase 2)'}`);
-console.log(`[worker] ${WORKER_READY ? 'ready' : 'not built yet (Phase 2)'}`);
+// Anchoring worker: Merkle root of new seals/closings → RegisterData on chain, paid by the sponsor.
+// The sponsor's TxSender must be the ONLY sender for that account in this process (nonce safety).
+if (env.CCD_SPONSOR_KEY_PATH && env.CCD_SPONSOR_ADDRESS) {
+  const sponsorKey = await loadAccountKey({
+    path: env.CCD_SPONSOR_KEY_PATH,
+    expectedAddress: env.CCD_SPONSOR_ADDRESS,
+    network: env.CCD_NETWORK,
+    forbiddenDir: fileURLToPath(new URL('../../../', import.meta.url)),
+  });
+  const sponsor = createTxSender({
+    client: grpc,
+    address: env.CCD_SPONSOR_ADDRESS,
+    signer: sponsorKey.signer,
+  });
+  const anchoring = createAnchorWorker({
+    repo: anchorRepo,
+    sender: sponsor,
+    kv,
+    intervalSeconds: env.ANCHOR_INTERVAL_SECONDS,
+  });
+  const anchorTick = () =>
+    anchoring
+      .tick()
+      .catch((err: unknown) =>
+        console.error('[anchor] tick failed:', err instanceof Error ? err.message : err),
+      );
+  setInterval(() => void anchorTick(), 30_000).unref();
+  void anchorTick();
+  console.log(
+    `[worker] anchoring every ${env.ANCHOR_INTERVAL_SECONDS}s from sponsor ${env.CCD_SPONSOR_ADDRESS.slice(0, 6)}…`,
+  );
+} else {
+  console.warn('[worker] anchoring disabled: set CCD_SPONSOR_KEY_PATH and CCD_SPONSOR_ADDRESS in .env');
+}
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {

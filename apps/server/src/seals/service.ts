@@ -2,6 +2,7 @@ import type { AccountTransactionSignature } from '@concordium/web-sdk';
 import type { MessageCheck, OnChainAgent } from '@cachet/concordium';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
 import {
+  buildMerkleTree,
   callCode,
   canonicalize,
   formatCode,
@@ -13,6 +14,7 @@ import {
   signSeal,
   spokenCode,
   ulid,
+  verifyMerkleProof,
   verifySealSignature,
   type Seal,
   type SealSigningKey,
@@ -22,6 +24,7 @@ import type { RegistryGateway } from '../agents/registry-gateway';
 import type { AgentRecord, AgentRepo } from '../agents/repo';
 import type { BusinessRepo } from '../business/repo';
 import type { KvStore } from '../infra/kv';
+import type { InclusionData } from '../worker/anchor-repo';
 import type { SealRepo, SealRow } from './repo';
 
 /** What the AI sends (and signs) to get a seal before it dials. */
@@ -104,6 +107,8 @@ export interface SealServiceDeps {
   maxSkewSeconds?: number;
   /** How long a live on-chain agent read is reused. Revocation shows up within this time. */
   chainCacheMs?: number;
+  /** Where a ledger item sits in an on-chain anchor (from the anchoring worker). */
+  inclusion?: (kind: string, refId: string) => Promise<InclusionData | null>;
   /** Optional: fetch an account's keys ahead of time (keeps signature checks instant). */
   prefetchAccount?: (address: string) => Promise<void>;
   now?: () => number;
@@ -324,7 +329,7 @@ export function createSealService(deps: SealServiceDeps) {
       if (!row) throw new SealError('seal_not_found');
       const seal = JSON.parse(row.sealJson) as Seal;
       const agent = await deps.agents.findById(row.agentId);
-      const anchor = await deps.seals.anchorInfo('seal', row.id);
+      const included = deps.inclusion ? await deps.inclusion('seal', row.id) : null;
       return {
         id: row.id,
         status: statusOf(row, nowMs()),
@@ -341,15 +346,36 @@ export function createSealService(deps: SealServiceDeps) {
         issuedAt: new Date(seal.issuedAt * 1000).toISOString(),
         expiresAt: new Date(seal.expiresAt * 1000).toISOString(),
         closedAt: row.closedAt?.toISOString() ?? null,
-        anchor: anchor?.anchor
-          ? { status: anchor.anchor.status, txHash: anchor.anchor.txHash, root: anchor.anchor.merkleRoot }
-          : { status: 'pending' as const },
+        anchor: included ? proofView(included, row.sealHash) : { status: 'pending' as const },
       };
     },
   };
 }
 
 export type SealService = ReturnType<typeof createSealService>;
+
+/**
+ * Inclusion proof for the public seal page: rebuilt from the anchor's items and checked here,
+ * so anyone can re-check it against the on-chain root.
+ */
+function proofView(inc: InclusionData, sealHash: string) {
+  const tree = buildMerkleTree(inc.batch);
+  const proof = tree.proofs[inc.leafIndex] ?? [];
+  const proofValid =
+    inc.itemHash === sealHash &&
+    tree.root === inc.anchor.merkleRoot &&
+    verifyMerkleProof(sealHash, proof, tree.root);
+  return {
+    status: inc.anchor.status,
+    txHash: inc.anchor.txHash,
+    root: inc.anchor.merkleRoot,
+    itemHash: inc.itemHash,
+    leafIndex: inc.leafIndex,
+    itemCount: inc.anchor.itemCount,
+    proof,
+    proofValid,
+  };
+}
 
 export function statusOf(row: Pick<SealRow, 'status' | 'expiresAt'>, nowMs: number) {
   if (row.status === 'open' && row.expiresAt.getTime() <= nowMs) return 'expired' as const;
