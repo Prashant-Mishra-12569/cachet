@@ -5,7 +5,7 @@
  *   pnpm registry:check
  */
 import { createRegistryClient } from '@cachet/concordium';
-import { fail, loadRootEnv, network } from './env';
+import { fail, stop, loadRootEnv, network } from './env';
 
 interface ListedAgent {
   token_id: number;
@@ -64,4 +64,4 @@ async function main(): Promise<void> {
   for (const issue of check.issues ?? []) console.log(`    issue: ${issue.field}: ${issue.message}`);
 }
 
-main().catch(fail);
+main().catch(stop);

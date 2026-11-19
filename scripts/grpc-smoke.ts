@@ -7,7 +7,7 @@
  *   pnpm smoke:grpc <address> [<address> …]
  */
 import { createGrpcClient, getAccountSnapshot } from '@cachet/concordium';
-import { fail, loadRootEnv, network, optionalPort } from './env';
+import { fail, stop, loadRootEnv, network, optionalPort } from './env';
 
 const ENV_ACCOUNTS = [
   'CCD_SPONSOR_ADDRESS',
@@ -55,4 +55,4 @@ async function main(): Promise<void> {
   if (failures > 0) fail(`${failures} account(s) could not be read`);
 }
 
-main().catch(fail);
+main().catch(stop);

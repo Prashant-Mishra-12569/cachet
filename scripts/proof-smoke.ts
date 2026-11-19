@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { signMessage, TransactionHash } from '@concordium/web-sdk';
 import { createGrpcClient, loadAccountKey } from '@cachet/concordium';
 import { explorerTxUrl } from '@cachet/shared';
-import { fail, loadRootEnv, network, optionalPort } from './env';
+import { fail, stop, loadRootEnv, network, optionalPort } from './env';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -83,4 +83,4 @@ async function main(): Promise<void> {
   console.log('✓ no company was saved for this account');
 }
 
-main().catch(fail);
+main().catch(stop);

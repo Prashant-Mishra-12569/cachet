@@ -9,7 +9,7 @@
 import { fileURLToPath } from 'node:url';
 import { signMessage } from '@concordium/web-sdk';
 import { loadAccountKey } from '@cachet/concordium';
-import { fail, loadRootEnv, network } from './env';
+import { fail, stop, loadRootEnv, network } from './env';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -85,4 +85,4 @@ async function main(): Promise<void> {
   console.log('✓ after logout the old cookie no longer works');
 }
 
-main().catch(fail);
+main().catch(stop);

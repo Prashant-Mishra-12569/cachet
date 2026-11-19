@@ -7,7 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fail } from './env';
+import { fail, stop } from './env';
 
 const ENV = fileURLToPath(new URL('../.env', import.meta.url));
 
@@ -44,4 +44,8 @@ function main(): void {
   for (const name of kept) console.log(`- kept existing ${name}`);
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  stop(err);
+}

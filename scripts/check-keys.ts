@@ -6,7 +6,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import { createGrpcClient, loadAccountKey, verifyKeyOnChain } from '@cachet/concordium';
-import { fail, loadRootEnv, network, optionalPort } from './env';
+import { fail, stop, loadRootEnv, network, optionalPort } from './env';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -48,4 +48,4 @@ async function main(): Promise<void> {
   if (failures > 0) fail(`${failures} key check(s) failed`);
 }
 
-main().catch(fail);
+main().catch(stop);

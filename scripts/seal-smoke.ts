@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { signMessage } from '@concordium/web-sdk';
 import { loadAccountKey } from '@cachet/concordium';
 import { canonicalize, sealCloseMessage, sealRequestMessage, sha256Hex } from '@cachet/shared/seal';
-import { fail, loadRootEnv, network } from './env';
+import { fail, stop, loadRootEnv, network } from './env';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -100,6 +100,8 @@ async function main(): Promise<void> {
   if (!closed.res.ok) fail(`close failed: HTTP ${closed.res.status} ${JSON.stringify(closed.json)}`);
   const after = (await (await fetch(`${api}/v1/seals/${sealId}`)).json()) as Record<string, unknown>;
   console.log(`✓ call ended → seal ${String(after['status'])}`);
+  console.log('\nIn about 5–6 minutes this seal is in the on-chain record. Check it with:');
+  console.log(`  pnpm anchor:verify ${sealId}`);
 }
 
-main().catch(fail);
+main().catch(stop);

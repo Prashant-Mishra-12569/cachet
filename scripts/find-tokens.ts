@@ -5,7 +5,7 @@
  *   pnpm find-tokens
  */
 import { createGrpcClient, listPlts } from '@cachet/concordium';
-import { fail, loadRootEnv, network, optionalPort } from './env';
+import { stop, loadRootEnv, network, optionalPort } from './env';
 
 // Matches EURQ, EURR, eEUR and also EUDemo (the token Concordium hands out for testing).
 const EURO_HINT = /eur|^eu/i;
@@ -44,4 +44,4 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch(fail);
+main().catch(stop);

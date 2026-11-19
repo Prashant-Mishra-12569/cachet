@@ -24,8 +24,22 @@ export function optionalPort(): number | undefined {
   return port;
 }
 
-/** Print an error in plain words and exit non-zero. */
+/** Thrown by fail() to stop a script after its message was printed. */
+class ScriptStop extends Error {}
+
+/**
+ * Print an error in plain words and stop the script with exit code 1.
+ * No process.exit(): exiting while network handles are still closing crashes Node 24 on Windows
+ * ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)"). Node exits by itself once idle.
+ */
 export function fail(err: unknown): never {
-  console.error(`\n✗ ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
+  if (!(err instanceof ScriptStop)) console.error(`\n✗ ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
+  throw err instanceof ScriptStop ? err : new ScriptStop();
+}
+
+/** Use as `main().catch(stop)`: reports the error (once) and sets exit code 1, without throwing. */
+export function stop(err: unknown): void {
+  if (!(err instanceof ScriptStop)) console.error(`\n✗ ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
 }
