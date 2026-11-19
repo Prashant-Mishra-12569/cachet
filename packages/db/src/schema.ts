@@ -1,5 +1,17 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, check, index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  boolean,
+  check,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 export const businessStatus = pgEnum('business_status', ['active', 'suspended']);
 
@@ -98,3 +110,117 @@ export const agents = pgTable(
 
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
+
+/**
+ * open       = the call may be happening now (shown green to the callee)
+ * closed     = the agent said the call ended
+ * superseded = a newer seal for the same agent + callee replaced it
+ * (expiry is not a status: a seal is simply no longer open once expires_at has passed)
+ */
+export const sealStatus = pgEnum('seal_status', ['open', 'closed', 'superseded']);
+
+/** Anchors: on-chain records (RegisterData) of a Merkle root over a batch of ledger items. */
+export const anchorStatus = pgEnum('anchor_status', ['pending', 'submitted', 'finalized', 'failed']);
+
+export const anchors = pgTable('anchors', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  merkleRoot: text('merkle_root').notNull().unique(),
+  itemCount: integer('item_count').notNull(),
+  status: anchorStatus('status').notNull().default('pending'),
+  txHash: text('tx_hash').unique(),
+  blockHash: text('block_hash'),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+});
+
+export const seals = pgTable(
+  'seals',
+  {
+    /** ULID */
+    id: text('id').primaryKey(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    /** hmac-sha256 fingerprint of the callee's number (never the number). */
+    phoneHash: text('phone_hash').notNull(),
+    fromE164: text('from_e164').notNull(),
+    purpose: text('purpose').notNull(),
+    message: text('message').notNull(),
+    amountValue: text('amount_value'),
+    amountAsset: text('amount_asset'),
+    code: text('code').notNull(),
+    status: sealStatus('status').notNull().default('open'),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closeReason: text('close_reason'),
+    /** The full signed seal, canonical JSON (RFC 8785): exactly what was signed and anchored. */
+    sealJson: text('seal_json').notNull(),
+    /** sha256(seal_json), hex. */
+    sealHash: text('seal_hash').notNull().unique(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('seals_phone_open_idx').on(t.phoneHash, t.expiresAt),
+    index('seals_agent_issued_idx').on(t.agentId, t.issuedAt),
+    check('seal_code_4_digits', sql`${t.code} ~ '^[0-9]{4}$'`),
+    check('seal_message_length', sql`char_length(${t.message}) between 1 and 80`),
+  ],
+);
+
+/**
+ * Everything we anchor on chain: seals, seal closings (later: consents, reports, status changes).
+ * item_hash = sha256 of the canonical item; anchors group items into a Merkle tree.
+ */
+export const ledgerItems = pgTable(
+  'ledger_items',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    kind: text('kind').notNull(),
+    refId: text('ref_id').notNull(),
+    itemHash: text('item_hash').notNull().unique(),
+    anchorId: bigint('anchor_id', { mode: 'number' }).references(() => anchors.id),
+    leafIndex: integer('leaf_index'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('ledger_unanchored_idx')
+      .on(t.id)
+      .where(sql`${t.anchorId} is null`),
+    index('ledger_ref_idx').on(t.kind, t.refId),
+  ],
+);
+
+/** Prepaid seals per agent, bought with x402 payments. */
+export const sealCredits = pgTable(
+  'seal_credits',
+  {
+    agentId: uuid('agent_id')
+      .primaryKey()
+      .references(() => agents.id),
+    balance: integer('balance').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('seal_credits_non_negative', sql`${t.balance} >= 0`)],
+);
+
+/** Each x402 credit purchase (one on-chain payment = one row; the tx can never be counted twice). */
+export const creditPurchases = pgTable('credit_purchases', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  agentId: uuid('agent_id')
+    .notNull()
+    .references(() => agents.id),
+  credits: integer('credits').notNull(),
+  amount: text('amount').notNull(),
+  asset: text('asset').notNull(),
+  txHash: text('tx_hash').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SealRow = typeof seals.$inferSelect;
+export type AnchorRow = typeof anchors.$inferSelect;
+export type LedgerItemRow = typeof ledgerItems.$inferSelect;

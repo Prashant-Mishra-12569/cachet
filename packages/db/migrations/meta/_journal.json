@@ -15,6 +15,13 @@
       "when": 1795101270444,
       "tag": "0001_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795104073822,
+      "tag": "0002_seals_ledger_credits",
+      "breakpoints": true
     }
   ]
 }
