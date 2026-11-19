@@ -105,14 +105,117 @@ export function createRegistryClient(options: RegistryClientOptions = {}) {
     return JSON.parse(text) as T;
   }
 
+  async function built(name: string, args: Record<string, unknown>): Promise<BuiltTx> {
+    const raw = await callTool<RawBuiltTx>(name, args);
+    if (
+      !raw?.contract_address ||
+      typeof raw.receive_name !== 'string' ||
+      typeof raw.parameter_hex !== 'string' ||
+      !/^[0-9a-f]*$/i.test(raw.parameter_hex)
+    ) {
+      throw new RegistryError(`MCP ${name}: unexpected payload shape`);
+    }
+    return {
+      contract: raw.contract_address,
+      receiveName: raw.receive_name,
+      parameterJson: raw.parameter_json,
+      parameterHex: raw.parameter_hex.toLowerCase(),
+      suggestedEnergy: Number(raw.suggested_energy ?? 30_000),
+    };
+  }
+
   return {
     baseUrl,
     health: () => getJson<{ ok: boolean; version: string }>('/healthz'),
     contractInfo: (network: Network) => callTool<RegistryContractInfo>('contract_info', { network }),
     /** Badge (base58 CIS-2 token address) or an owner account. */
-    checkBadge: <T = unknown>(id: string) => getJson<T>(`/v1/check-badge/${encodeURIComponent(id)}`),
+    checkBadge: <T = BadgeCheck>(id: string) => getJson<T>(`/v1/check-badge/${encodeURIComponent(id)}`),
+    buildRegister: (network: Network, sender: string) => built('build_register', { network, sender }),
+    buildSetAgentUri: (
+      network: Network,
+      tokenId: bigint,
+      agentUri: string,
+      metadataHashHex: string,
+      sender: string,
+    ) =>
+      built('build_set_agent_uri', {
+        network,
+        token_id: tokenId.toString(),
+        agent_uri: agentUri,
+        metadata_hash_hex: metadataHashHex,
+        sender,
+      }),
+    async buildAgentCard(input: BuildAgentCardInput): Promise<{ cardJson: string; metadataHashHex: string }> {
+      const r = await callTool<{ agent_card_json?: unknown; metadata_hash_hex?: unknown }>(
+        'build_agent_card',
+        {
+          network: input.network,
+          name: input.name,
+          description: input.description,
+          agent_uri: input.agentUri,
+          owner_account: input.ownerAccount,
+          token_id: input.tokenId.toString(),
+          version: input.version ?? '1.0.0',
+          skills: input.skills,
+          provider: input.provider ?? null,
+          documentation_url: input.documentationUrl ?? null,
+        },
+      );
+      if (typeof r.agent_card_json !== 'string' || typeof r.metadata_hash_hex !== 'string') {
+        throw new RegistryError('MCP build_agent_card: unexpected payload shape');
+      }
+      return { cardJson: r.agent_card_json, metadataHashHex: r.metadata_hash_hex };
+    },
+    async tokenAddress(contract: ContractRef, tokenId: bigint): Promise<string> {
+      const r = await callTool<{ token_address?: unknown }>('token_address', {
+        contract_index: contract.index,
+        contract_subindex: contract.subindex,
+        token_id: tokenId.toString(),
+      });
+      if (typeof r.token_address !== 'string') throw new RegistryError('MCP token_address: no address');
+      return r.token_address;
+    },
     callTool,
   };
+}
+
+/** A sign-ready contract update from the registry's build_* tools. */
+export interface BuiltTx {
+  contract: ContractRef;
+  receiveName: string;
+  /** Parameter in the contract schema's JSON form (what the browser wallet takes). */
+  parameterJson: unknown;
+  /** The same parameter, wire-encoded. */
+  parameterHex: string;
+  suggestedEnergy: number;
+}
+
+interface RawBuiltTx {
+  contract_address?: ContractRef;
+  receive_name?: unknown;
+  parameter_json?: unknown;
+  parameter_hex?: unknown;
+  suggested_energy?: unknown;
+}
+
+export interface BuildAgentCardInput {
+  network: Network;
+  name: string;
+  description: string;
+  agentUri: string;
+  ownerAccount: string;
+  tokenId: bigint;
+  version?: string;
+  skills: { id: string; name: string; description: string; tags: string[] }[];
+  provider?: { organization: string; url?: string };
+  documentationUrl?: string;
+}
+
+/** GET /v1/check-badge/{badge} (shape checked live 17–20 Nov 2026). */
+export interface BadgeCheck {
+  badge_valid: boolean;
+  checks?: Record<string, boolean>;
+  issues?: { severity: string; field: string; message: string }[];
 }
 
 export type RegistryClient = ReturnType<typeof createRegistryClient>;

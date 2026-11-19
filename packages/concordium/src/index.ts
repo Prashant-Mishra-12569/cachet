@@ -4,3 +4,5 @@ export * from './accounts';
 export * from './registry';
 export * from './keys';
 export * from './signatures';
+export * from './registry-events';
+export * from './registry-chain';
