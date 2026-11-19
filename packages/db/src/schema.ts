@@ -10,6 +10,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -167,6 +168,10 @@ export const seals = pgTable(
   (t) => [
     index('seals_phone_open_idx').on(t.phoneHash, t.expiresAt),
     index('seals_agent_issued_idx').on(t.agentId, t.issuedAt),
+    // At most ONE open seal per agent + callee, even when two requests race.
+    uniqueIndex('seals_one_open_per_callee')
+      .on(t.agentId, t.phoneHash)
+      .where(sql`${t.status} = 'open'`),
     check('seal_code_4_digits', sql`${t.code} ~ '^[0-9]{4}$'`),
     check('seal_message_length', sql`char_length(${t.message}) between 1 and 80`),
   ],

@@ -62,6 +62,44 @@ export async function verifyAccountMessage(
   return valid ? { ok: true } : { ok: false, reason: 'bad_signature' };
 }
 
+/**
+ * Same check as verifyAccountMessage, but keeps each account's on-chain keys for `ttlMs`
+ * (keys change rarely; this keeps the seal hot path fast).
+ */
+export function createCachedMessageVerifier(client: ConcordiumGRPCClient, ttlMs = 60_000) {
+  const cache = new Map<
+    string,
+    { at: number; info: Awaited<ReturnType<ConcordiumGRPCClient['getAccountInfo']>> }
+  >();
+  const verify = async function verify(
+    address: string,
+    message: string,
+    signature: AccountTransactionSignature,
+  ): Promise<MessageCheck> {
+    let entry = cache.get(address);
+    if (!entry || Date.now() - entry.at > ttlMs) {
+      try {
+        entry = { at: Date.now(), info: await client.getAccountInfo(AccountAddress.fromBase58(address)) };
+      } catch (err) {
+        if ((err as { code?: unknown } | null)?.code === 'NOT_FOUND')
+          return { ok: false, reason: 'account_not_found' };
+        throw err;
+      }
+      cache.set(address, entry);
+    }
+    const valid = await verifyMessageSignature(message, signature, entry.info).catch(() => false);
+    return valid ? { ok: true } : { ok: false, reason: 'bad_signature' };
+  };
+  /** Fetch (or refresh) an account's keys ahead of time, so the next check is instant. */
+  const prefetch = async (address: string) => {
+    cache.set(address, {
+      at: Date.now(),
+      info: await client.getAccountInfo(AccountAddress.fromBase58(address)),
+    });
+  };
+  return Object.assign(verify, { prefetch });
+}
+
 /** Returns the checksum-validated base58 address, or undefined if invalid. */
 export function normalizeAccountAddress(value: string): string | undefined {
   try {

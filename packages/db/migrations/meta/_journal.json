@@ -22,6 +22,13 @@
       "when": 1795104073822,
       "tag": "0002_seals_ledger_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795104626817,
+      "tag": "0003_one_open_seal_per_callee",
+      "breakpoints": true
     }
   ]
 }

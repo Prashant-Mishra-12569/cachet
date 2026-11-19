@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "seals_one_open_per_callee" ON "seals" USING btree ("agent_id","phone_hash") WHERE "seals"."status" = 'open';
