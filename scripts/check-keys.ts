@@ -14,6 +14,7 @@ const PAIRS = [
   { label: 'sponsor', keyVar: 'CCD_SPONSOR_KEY_PATH', addressVar: 'CCD_SPONSOR_ADDRESS' },
   { label: 'facilitator', keyVar: 'CCD_FACILITATOR_KEY_PATH', addressVar: 'CCD_FACILITATOR_ADDRESS' },
   { label: 'agent', keyVar: 'CCD_AGENT_KEY_PATH', addressVar: 'CCD_AGENT_ADDRESS' },
+  { label: 'verifier', keyVar: 'CCD_VERIFIER_KEY_PATH', addressVar: 'CCD_VERIFIER_ADDRESS' },
 ] as const;
 
 async function main(): Promise<void> {

@@ -37,7 +37,11 @@ async function main(): Promise<void> {
   // Sign in.
   const ch = await post('/v1/auth/challenge', { account: address });
   const signature = await signMessage(key.address, String(ch.json['message']), key.signer);
-  const signedIn = await post('/v1/auth/verify', { challengeId: ch.json['challengeId'], account: address, signature });
+  const signedIn = await post('/v1/auth/verify', {
+    challengeId: ch.json['challengeId'],
+    account: address,
+    signature,
+  });
   cookie = signedIn.res.headers.get('set-cookie')?.split(';')[0] ?? '';
   if (!cookie) fail('sign-in failed');
   console.log(`✓ signed in as ${address.slice(0, 6)}…`);
@@ -52,7 +56,10 @@ async function main(): Promise<void> {
 
   // The request anchor must be on chain.
   const grpc = createGrpcClient({ network: net, host: process.env['CCD_GRPC_HOST'], port: optionalPort() });
-  const outcome = await grpc.waitForTransactionFinalization(TransactionHash.fromHexString(request.transactionRef), 30_000);
+  const outcome = await grpc.waitForTransactionFinalization(
+    TransactionHash.fromHexString(request.transactionRef),
+    30_000,
+  );
   console.log(`✓ request anchor finalized on ${net} in block ${outcome.blockHash.toString().slice(0, 12)}…`);
   console.log(`    ${explorerTxUrl(net, request.transactionRef)}`);
 

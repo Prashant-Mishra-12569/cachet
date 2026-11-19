@@ -1,7 +1,7 @@
 /**
  * gRPC smoke test: connects to the Concordium node and reads balance + next nonce for the
  * accounts listed in .env (CCD_SPONSOR_ADDRESS, CCD_COMPANY_ADDRESS, CCD_AGENT_ADDRESS,
- * CACHET_TREASURY_ADDRESS, CCD_PERSON_ADDRESS). Addresses can also be passed as arguments.
+ * CACHET_TREASURY_ADDRESS, CCD_PERSON_ADDRESS, CCD_VERIFIER_ADDRESS). Addresses can also be passed as arguments.
  *
  *   pnpm smoke:grpc
  *   pnpm smoke:grpc <address> [<address> …]
@@ -15,6 +15,7 @@ const ENV_ACCOUNTS = [
   'CCD_AGENT_ADDRESS',
   'CACHET_TREASURY_ADDRESS',
   'CCD_PERSON_ADDRESS',
+  'CCD_VERIFIER_ADDRESS',
 ] as const;
 
 async function main(): Promise<void> {

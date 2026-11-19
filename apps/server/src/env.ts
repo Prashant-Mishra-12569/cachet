@@ -56,6 +56,7 @@ const EnvSchema = z.object({
   CACHET_TREASURY_ADDRESS: optionalAccount,
   CCD_PERSON_ADDRESS: optionalAccount,
   CCD_FACILITATOR_ADDRESS: optionalAccount,
+  CCD_VERIFIER_ADDRESS: optionalAccount,
 
   TELEGRAM_BOT_TOKEN: optionalString,
 });
