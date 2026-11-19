@@ -10,6 +10,7 @@
     "check-keys": "tsx check-keys.ts",
     "auth:smoke": "tsx auth-smoke.ts",
     "proof:smoke": "tsx proof-smoke.ts",
+    "gen-secrets": "tsx gen-secrets.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
