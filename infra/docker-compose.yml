@@ -1,5 +1,5 @@
 # Local development services. Start with `pnpm db:up`, stop with `pnpm db:down`.
-# Ports are bound to localhost only.
+# Ports are bound to localhost only. Variables come from the repo-root .env (--env-file .env).
 name: cachet
 
 services:
@@ -35,6 +35,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Concordium Credential Verification Service (Verify & Access). Anchors each proof request and
+  # each verified proof on-chain, paying from the account in CCD_VERIFIER_KEY_PATH.
+  verifier:
+    image: concordium/credential-verification-service:0.3.1
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      CREDENTIAL_VERIFICATION_SERVICE_NODE_GRPC_ENDPOINT: ${VERIFIER_NODE_GRPC_ENDPOINT:-https://grpc.testnet.concordium.com:20000}
+      CREDENTIAL_VERIFICATION_SERVICE_ACCOUNT: /keys/account.export
+      CREDENTIAL_VERIFICATION_SERVICE_API_ADDRESS: 0.0.0.0:8000
+      CREDENTIAL_VERIFICATION_SERVICE_MONITORING_ADDRESS: 0.0.0.0:8001
+      CREDENTIAL_VERIFICATION_SERVICE_LOG_LEVEL: info
+    ports:
+      - '127.0.0.1:8000:8000'
+      - '127.0.0.1:8001:8001'
+    volumes:
+      # Key file lives OUTSIDE the repo; mounted read-only.
+      - ${CCD_VERIFIER_KEY_PATH:?Set CCD_VERIFIER_KEY_PATH in .env}:/keys/account.export:ro
 
 volumes:
   pgdata:
