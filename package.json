@@ -25,7 +25,8 @@
     "check-keys": "pnpm --filter @cachet/scripts check-keys",
     "auth:smoke": "pnpm --filter @cachet/scripts auth:smoke",
     "proof:smoke": "pnpm --filter @cachet/scripts proof:smoke",
-    "gen-secrets": "pnpm --filter @cachet/scripts gen-secrets"
+    "gen-secrets": "pnpm --filter @cachet/scripts gen-secrets",
+    "seal:smoke": "pnpm --filter @cachet/scripts seal:smoke"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

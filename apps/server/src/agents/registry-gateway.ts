@@ -2,6 +2,7 @@ import {
   confirmContractUpdate,
   encodeParameter,
   loadContractSchema,
+  readAgentOnChain,
   simulateUpdate,
   TxCheckError,
   type BadgeCheck,
@@ -10,6 +11,7 @@ import {
   type ConfirmedUpdate,
   type ContractRef,
   type ContractSchema,
+  type OnChainAgent,
   type RegistryClient,
 } from '@cachet/concordium';
 import type { ConcordiumGRPCClient } from '@concordium/web-sdk';
@@ -54,6 +56,8 @@ export interface RegistryGateway {
   toWalletTx(built: BuiltTx, invoker: string): Promise<WalletTx>;
   confirm(txHash: string, sender: string, receiveName: string): Promise<ConfirmedUpdate>;
   checkBadge(badge: string): Promise<BadgeCheck>;
+  /** The agent's live record on the registry contract (null if it does not exist). */
+  readAgent(tokenId: bigint): Promise<OnChainAgent | null>;
 }
 
 export function createRegistryGateway(deps: {
@@ -165,5 +169,11 @@ export function createRegistryGateway(deps: {
     },
 
     checkBadge: (badge) => upstream('check_badge', () => deps.registry.checkBadge(badge)),
+
+    readAgent: (tokenId) =>
+      upstream('agentOf', async () => {
+        const { ref, schema } = await contract();
+        return readAgentOnChain(deps.grpc, { contract: ref, schema, tokenId });
+      }),
   };
 }

@@ -1,9 +1,12 @@
-import type { BadgeCheck, BuiltTx, ConfirmedUpdate, RegistryEvent } from '@cachet/concordium';
+import type { BadgeCheck, BuiltTx, ConfirmedUpdate, OnChainAgent, RegistryEvent } from '@cachet/concordium';
 import { createMemoryCardHost, type CardHost } from '../agents/card-host';
 import { GatewayError, type RegistryGateway } from '../agents/registry-gateway';
 import { createMemoryAgentRepo } from '../agents/repo';
 import { createAgentService } from '../agents/service';
+import { loadSealSigningKey } from '@cachet/shared/seal';
 import { createAuthService, type VerifyMessage } from '../auth/service';
+import { createMemorySealRepo } from '../seals/repo';
+import { createSealService } from '../seals/service';
 import { createCompanyProofService } from '../business/company-proof';
 import { createMemoryBusinessRepo } from '../business/repo';
 import { createMemoryKv } from '../infra/kv';
@@ -93,6 +96,8 @@ export function makeTestApp(
     gateway?: RegistryGateway;
     /** Card host; pass null to simulate "not configured". */
     cardHost?: CardHost | null;
+    /** Checks the AI's seal-request signatures. Default: accept, and record what was checked. */
+    verifyAgentMessage?: VerifyMessage;
   } = {},
 ) {
   const clock = { t: Date.parse('2026-11-19T10:00:00Z') };
@@ -127,6 +132,29 @@ export function makeTestApp(
     servedTimeoutMs: 0,
     sleep: async () => undefined,
   });
+  const sealRepo = createMemorySealRepo();
+  const signingKey = loadSealSigningKey('22'.repeat(32));
+  const checkedMessages: { address: string; message: string }[] = [];
+  const seals = createSealService({
+    seals: sealRepo,
+    agents: agentRepo,
+    businesses: repo,
+    gateway: options.gateway ?? chain.gateway,
+    verifyMessage:
+      options.verifyAgentMessage ??
+      (async (address, message) => {
+        checkedMessages.push({ address, message });
+        return { ok: true };
+      }),
+    kv,
+    signingKey,
+    callCodeSecret: 'test-call-code-secret-0123456789abcdef',
+    phonePepper: 'test-phone-pepper-0123456789abcdef',
+    network: 'testnet',
+    pltTokenId: 'EUDemo',
+    webOrigin: WEB_ORIGIN,
+    now,
+  });
   const app = createApp({
     network: 'testnet',
     version: 'test',
@@ -135,12 +163,14 @@ export function makeTestApp(
     repo,
     companyProof,
     agents,
+    seals,
+    signingKey,
     registryUrl: 'https://registry.test',
     webOrigin: WEB_ORIGIN,
     secureCookies: false,
     trustProxy: false,
   });
-  return { app, kv, clock, repo, chain, cardHost, agentRepo };
+  return { app, kv, clock, repo, chain, cardHost, agentRepo, sealRepo, signingKey, checkedMessages };
 }
 
 export function postJson(path: string, body: unknown, headers: Record<string, string> = {}) {
@@ -175,6 +205,8 @@ export function fakeChain() {
     string,
     { sender: string; receiveName: string; events: RegistryEvent[]; failed?: boolean }
   >();
+  /** Live on-chain agent records, keyed by token id (set by tests). */
+  const onChain = new Map<bigint, OnChainAgent>();
   const built = (receiveName: string, parameterJson: unknown): BuiltTx => ({
     contract: REGISTRY,
     receiveName,
@@ -201,7 +233,7 @@ export function fakeChain() {
               {
                 uri: 'https://docs.concordium.com/a2a-extensions/concordium-badge/v1',
                 params: {
-                  tokenAddress: `ccd:x/cis-2:BADGE${input.tokenId}`,
+                  tokenAddress: `ccd:x/cis-2:JyP9Badge${input.tokenId}`,
                   owner: { account: input.ownerAccount },
                 },
               },
@@ -212,7 +244,7 @@ export function fakeChain() {
         null,
         2,
       ),
-    tokenAddress: async (tokenId) => `BADGE${tokenId}`,
+    tokenAddress: async (tokenId) => `JyP9Badge${tokenId}`,
     toWalletTx: async (b) => ({ ...b, schemaBase64: 'c2NoZW1h', maxEnergy: b.suggestedEnergy }),
     async confirm(txHash, sender, receiveName): Promise<ConfirmedUpdate> {
       const tx = txs.get(txHash);
@@ -223,9 +255,11 @@ export function fakeChain() {
       return { txHash, blockHash: 'b'.repeat(64), events: tx.events };
     },
     checkBadge: async (): Promise<BadgeCheck> => ({ badge_valid: true, checks: { status_active: true } }),
+    readAgent: async (tokenId) => onChain.get(tokenId) ?? null,
   };
   return {
     gateway,
+    onChain,
     addTx(
       hash: string,
       tx: { sender: string; receiveName: string; events: RegistryEvent[]; failed?: boolean },

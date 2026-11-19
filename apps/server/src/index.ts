@@ -2,9 +2,11 @@ import { serve } from '@hono/node-server';
 import {
   accountOfCredential,
   createGrpcClient,
+  createCachedMessageVerifier,
   createRegistryClient,
   verifyAccountMessage,
 } from '@cachet/concordium';
+import { loadSealSigningKey } from '@cachet/shared/seal';
 import { createDb, runMigrations } from '@cachet/db';
 import pkg from '../package.json' with { type: 'json' };
 import { createGistCardHost } from './agents/card-host';
@@ -19,6 +21,8 @@ import { createBusinessRepo } from './business/repo';
 import { loadEnv } from './env';
 import { FACILITATOR_READY } from './facilitator/index';
 import { createRedisKv } from './infra/kv';
+import { createSealRepo } from './seals/repo';
+import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { WORKER_READY } from './worker/index';
 
@@ -70,13 +74,44 @@ const companyProof = createCompanyProofService({
 const registry = createRegistryClient({ baseUrl: env.AGENT_REGISTRY_API });
 const cardHost = env.GIST_TOKEN ? createGistCardHost({ token: env.GIST_TOKEN }) : null;
 if (!cardHost) console.warn('[agents] GIST_TOKEN not set: Agent Cards cannot be published yet.');
+const agentRepo = createAgentRepo(database.db);
+const gateway = createRegistryGateway({ registry, grpc, network: env.CCD_NETWORK });
 const agents = createAgentService({
-  agents: createAgentRepo(database.db),
+  agents: agentRepo,
   businesses: repo,
-  gateway: createRegistryGateway({ registry, grpc, network: env.CCD_NETWORK }),
+  gateway,
   cardHost,
   network: env.CCD_NETWORK,
 });
+
+const signingKey = loadSealSigningKey(env.SEAL_SIGNING_KEY);
+const agentKeys = createCachedMessageVerifier(grpc);
+const seals = createSealService({
+  seals: createSealRepo(database.db),
+  agents: agentRepo,
+  businesses: repo,
+  gateway,
+  verifyMessage: agentKeys,
+  prefetchAccount: agentKeys.prefetch,
+  kv,
+  signingKey,
+  callCodeSecret: env.CALL_CODE_SECRET,
+  phonePepper: env.PHONE_PEPPER,
+  network: env.CCD_NETWORK,
+  pltTokenId: env.PLT_TOKEN_ID,
+  webOrigin: env.WEB_ORIGIN,
+});
+console.log(`[seals] signing key ${signingKey.kid}`);
+
+// Keep seal issuing fast: refresh on-chain agent records + AI account keys every 10 s.
+const warmSeals = () =>
+  seals
+    .warm()
+    .catch((err: unknown) =>
+      console.error('[seals] warm-up failed:', err instanceof Error ? err.message : err),
+    );
+await warmSeals().then((n) => typeof n === 'number' && console.log(`[seals] warmed ${n} active agent(s)`));
+setInterval(() => void warmSeals(), 10_000).unref();
 
 const app = createApp({
   network: env.CCD_NETWORK,
@@ -86,6 +121,8 @@ const app = createApp({
   repo,
   companyProof,
   agents,
+  seals,
+  signingKey,
   registryUrl: registry.baseUrl,
   webOrigin: env.WEB_ORIGIN,
   secureCookies: env.NODE_ENV === 'production',

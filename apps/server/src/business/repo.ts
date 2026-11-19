@@ -25,6 +25,7 @@ export interface VerifiedCompanyInput {
 
 export interface BusinessRepo {
   findByAccount(account: string): Promise<BusinessRecord | null>;
+  findById(id: string): Promise<BusinessRecord | null>;
   /** Create the business, or refresh its proven details if it proves again. */
   upsertVerified(input: VerifiedCompanyInput): Promise<BusinessRecord>;
 }
@@ -37,6 +38,10 @@ export function createBusinessRepo(db: Db): BusinessRepo {
         .from(businesses)
         .where(eq(businesses.concordiumAccount, account))
         .limit(1);
+      return rows[0] ?? null;
+    },
+    async findById(id) {
+      const rows = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
       return rows[0] ?? null;
     },
     async upsertVerified(input) {
@@ -68,6 +73,7 @@ export function createMemoryBusinessRepo(): BusinessRepo {
   const byAccount = new Map<string, BusinessRecord>();
   return {
     findByAccount: async (account) => byAccount.get(account) ?? null,
+    findById: async (id) => [...byAccount.values()].find((b) => b.id === id) ?? null,
     async upsertVerified(input) {
       const existing = byAccount.get(input.concordiumAccount);
       const record: BusinessRecord = {

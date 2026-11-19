@@ -124,10 +124,10 @@ describe('register on Concordium (step 3)', () => {
     expect(agent).toMatchObject({
       status: 'registered',
       tokenId: '42',
-      badge: 'BADGE42',
+      badge: 'JyP9Badge42',
       agentWallet: ACCOUNT,
       registerTxUrl: `https://ccdexplorer.io/testnet/transaction/${TX1}`,
-      badgeCheckUrl: 'https://registry.test/v1/check-badge/BADGE42',
+      badgeCheckUrl: 'https://registry.test/v1/check-badge/JyP9Badge42',
     });
   });
 

@@ -11,6 +11,7 @@
     "auth:smoke": "tsx auth-smoke.ts",
     "proof:smoke": "tsx proof-smoke.ts",
     "gen-secrets": "tsx gen-secrets.ts",
+    "seal:smoke": "tsx seal-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

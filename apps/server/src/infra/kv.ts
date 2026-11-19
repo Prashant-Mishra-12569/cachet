@@ -10,6 +10,10 @@ export interface KvStore {
   /** Atomically read and delete (single-use values such as challenges). */
   take(key: string): Promise<string | null>;
   del(key: string): Promise<void>;
+  /** Set only if absent (atomic). True if this call claimed the key: use for single-use nonces. */
+  claim(key: string, ttlSeconds: number): Promise<boolean>;
+  /** Fire-and-forget message to subscribers (e.g. the bot, the lamp). */
+  publish(channel: string, message: string): Promise<void>;
   /** Increment a counter; the TTL is set when the counter is created. */
   incr(key: string, ttlSeconds: number): Promise<number>;
   ping(): Promise<boolean>;
@@ -32,6 +36,16 @@ export async function createRedisKv(url: string): Promise<KvStore> {
       await client.set(key, value, { expiration: { type: 'EX', value: ttlSeconds } });
     },
     take: (key) => client.getDel(key),
+    async claim(key, ttlSeconds) {
+      const r = await client.set(key, '1', {
+        condition: 'NX',
+        expiration: { type: 'EX', value: ttlSeconds },
+      });
+      return r === 'OK';
+    },
+    async publish(channel, message) {
+      await client.publish(channel, message);
+    },
     async del(key) {
       await client.del(key);
     },
@@ -54,8 +68,11 @@ export async function createRedisKv(url: string): Promise<KvStore> {
 }
 
 /** In-memory store for tests. `now` lets tests move time forward. */
-export function createMemoryKv(now: () => number = Date.now): KvStore {
+export function createMemoryKv(
+  now: () => number = Date.now,
+): KvStore & { published: { channel: string; message: string }[] } {
   const data = new Map<string, { value: string; expiresAt: number }>();
+  const published: { channel: string; message: string }[] = [];
 
   const read = (key: string) => {
     const entry = data.get(key);
@@ -71,6 +88,15 @@ export function createMemoryKv(now: () => number = Date.now): KvStore {
     get: async (key) => read(key)?.value ?? null,
     async set(key, value, ttlSeconds) {
       data.set(key, { value, expiresAt: now() + ttlSeconds * 1000 });
+    },
+    async claim(key, ttlSeconds) {
+      if (read(key)) return false;
+      data.set(key, { value: '1', expiresAt: now() + ttlSeconds * 1000 });
+      return true;
+    },
+    published,
+    async publish(channel, message) {
+      published.push({ channel, message });
     },
     async take(key) {
       const entry = read(key);

@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
+import type { SealSigningKey } from '@cachet/shared/seal';
 import type { AgentService } from '../agents/service';
+import type { SealService } from '../seals/service';
 import type { AuthService } from '../auth/service';
 import type { CompanyProofService } from '../business/company-proof';
 import type { BusinessRepo } from '../business/repo';
@@ -9,6 +11,7 @@ import type { KvStore } from '../infra/kv';
 import { apiError } from './errors';
 import { agentRoutes } from './routes/agents';
 import { authRoutes } from './routes/auth';
+import { sealRoutes, wellKnownRoutes } from './routes/seals';
 import { businessRoutes } from './routes/business';
 
 export interface AppDeps {
@@ -19,6 +22,8 @@ export interface AppDeps {
   repo: BusinessRepo;
   companyProof: CompanyProofService;
   agents: AgentService;
+  seals: SealService;
+  signingKey: SealSigningKey;
   /** Public Agent Registry service URL (for badge-check links). */
   registryUrl: string;
   webOrigin: string;
@@ -51,6 +56,8 @@ export function createApp(deps: AppDeps) {
   app.route('/v1/auth', authRoutes(deps));
   app.route('/v1/business', businessRoutes(deps));
   app.route('/v1/agents', agentRoutes(deps));
+  app.route('/v1/seals', sealRoutes(deps));
+  app.route('/.well-known', wellKnownRoutes(deps));
 
   app.notFound((c) => apiError(c, 'not_found'));
 

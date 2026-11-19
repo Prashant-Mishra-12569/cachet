@@ -60,6 +60,13 @@ const EnvSchema = z.object({
 
   TELEGRAM_BOT_TOKEN: optionalString,
 
+  /** Seal secrets: generate with `pnpm gen-secrets`. */
+  SEAL_SIGNING_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
+  CALL_CODE_SECRET: z.string().min(32, 'missing. Run "pnpm gen-secrets".'),
+  PHONE_PEPPER: z.string().min(32, 'missing. Run "pnpm gen-secrets". Never change it once set.'),
+  /** The Protocol-Level Token used for payments (EUDemo on testnet). */
+  PLT_TOKEN_ID: z.string().min(1).default('EUDemo'),
+
   /** Concordium Agent Registry service (REST + MCP). */
   AGENT_REGISTRY_API: z.url().default('https://agent-registry-mcp.concordium.com'),
   /** GitHub token with ONLY the "gist" scope: temporary public hosting for Agent Cards. */

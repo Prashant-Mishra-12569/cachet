@@ -74,6 +74,41 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     status: 503,
     message: 'Your Agent Card was published but is not reachable yet. Please try again in a minute.',
   },
+  seal_stale: {
+    status: 400,
+    message: "This seal request is too old (or from the future). Check the AI caller's clock.",
+  },
+  seal_replay: { status: 409, message: 'This seal request was already used.' },
+  seal_bad_signature: {
+    status: 401,
+    message: "The AI caller's signature doesn't match its Concordium account.",
+  },
+  agent_unknown: { status: 404, message: "This AI caller isn't registered and active in Cachet." },
+  agent_account_mismatch: { status: 403, message: "This account isn't the AI caller's registered account." },
+  agent_revoked: { status: 403, message: 'This AI caller is switched off on Concordium.' },
+  agent_card_mismatch: {
+    status: 409,
+    message: "The Agent Card pinned on Concordium doesn't match Cachet's record.",
+  },
+  business_suspended: { status: 403, message: 'This company is suspended in Cachet.' },
+  number_not_allowed: { status: 400, message: "This calling number isn't registered for this AI caller." },
+  purpose_not_allowed: { status: 400, message: "This purpose isn't registered for this AI caller." },
+  message_not_allowed: {
+    status: 400,
+    message: 'The message must be 1–80 characters, with no links and no long numbers.',
+  },
+  amount_not_allowed: { status: 400, message: 'The amount or currency is not allowed.' },
+  invalid_phone: {
+    status: 400,
+    message: 'Phone numbers must be in international format, like +31201234567.',
+  },
+  payment_required: { status: 402, message: 'No seal credits left. Buy seal credits and try again.' },
+  seal_conflict: {
+    status: 409,
+    message: 'Another seal for this person was issued at the same moment. Please try again.',
+  },
+  seal_not_found: { status: 404, message: "This seal doesn't exist." },
+  seal_not_open: { status: 409, message: 'This seal is no longer open.' },
   verifier_unavailable: {
     status: 503,
     message: 'Company verification is temporarily unavailable. Please try again shortly.',

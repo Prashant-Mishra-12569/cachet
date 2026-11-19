@@ -59,6 +59,10 @@ export class DuplicateError extends Error {
 export interface AgentRepo {
   listByBusiness(businessId: string): Promise<AgentRecord[]>;
   findForBusiness(businessId: string, agentId: string): Promise<AgentRecord | null>;
+  /** By badge (base58 CIS-2 token address). */
+  findByBadge(badge: string): Promise<AgentRecord | null>;
+  findById(agentId: string): Promise<AgentRecord | null>;
+  listActive(): Promise<AgentRecord[]>;
   create(input: NewAgentInput): Promise<AgentRecord>;
   /**
    * Apply `patch` only if the agent is still in `expectedStatus` (no double-processing when two
@@ -98,6 +102,18 @@ export function createAgentRepo(db: Db): AgentRepo {
         .where(and(eq(agents.id, agentId), eq(agents.businessId, businessId)))
         .limit(1);
       return rows[0] ? asRecord(rows[0]) : null;
+    },
+    async findByBadge(badge) {
+      const rows = await db.select().from(agents).where(eq(agents.badge, badge)).limit(1);
+      return rows[0] ? asRecord(rows[0]) : null;
+    },
+    async findById(agentId) {
+      const rows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+      return rows[0] ? asRecord(rows[0]) : null;
+    },
+    async listActive() {
+      const rows = await db.select().from(agents).where(eq(agents.status, 'active'));
+      return rows.map(asRecord);
     },
     async create(input) {
       const rows = await db.insert(agents).values(input).returning();
@@ -139,6 +155,9 @@ export function createMemoryAgentRepo(): AgentRepo & { rows: Map<string, AgentRe
       const a = rows.get(agentId);
       return a && a.businessId === businessId ? a : null;
     },
+    findByBadge: async (badge) => [...rows.values()].find((a) => a.badge === badge) ?? null,
+    findById: async (agentId) => rows.get(agentId) ?? null,
+    listActive: async () => [...rows.values()].filter((a) => a.status === 'active'),
     async create(input) {
       const record: AgentRecord = {
         ...input,
