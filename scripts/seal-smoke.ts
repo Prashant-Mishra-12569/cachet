@@ -4,7 +4,9 @@
  * public view → close the seal when the "call" ends.
  * Needs at least one seal credit for the agent.
  *
- *   pnpm seal:smoke <badge> <calleeE164> [fromE164]
+ *   pnpm seal:smoke <badge> <calleeE164> [fromE164] [--keep-open]
+ *
+ * --keep-open: don't close the seal (so the bot's /check shows green for up to 15 minutes).
  */
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +19,10 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 async function main(): Promise<void> {
   loadRootEnv();
-  const [badge, to, from = to] = process.argv.slice(2);
-  if (!badge || !to) fail('usage: pnpm seal:smoke <badge> <calleeE164> [fromE164]');
+  const args = process.argv.slice(2);
+  const keepOpen = args.includes('--keep-open');
+  const [badge, to, from = to] = args.filter((a) => !a.startsWith('--'));
+  if (!badge || !to) fail('usage: pnpm seal:smoke <badge> <calleeE164> [fromE164] [--keep-open]');
   const api = `http://localhost:${process.env['PORT'] ?? '8787'}`;
   const path = process.env['CCD_AGENT_KEY_PATH'];
   const account = process.env['CCD_AGENT_ADDRESS'];
@@ -82,6 +86,11 @@ async function main(): Promise<void> {
   );
   if (JSON.stringify(view).includes(String(issued.json['code']).replace('-', '')))
     fail('public view leaks the code');
+
+  if (keepOpen) {
+    console.log('✓ seal left OPEN (--keep-open): try /check in the bot now. It expires in 15 minutes.');
+    return;
+  }
 
   const closed = await post(
     `/v1/seals/${sealId}/close`,
