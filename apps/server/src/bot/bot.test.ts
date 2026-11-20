@@ -105,6 +105,7 @@ function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
     people,
     seals,
     webOrigin,
+    network: 'testnet',
     miniAppUrl,
     now,
     log: { log: () => undefined, error: () => undefined },
@@ -491,6 +492,29 @@ describe('live seal cards', () => {
     const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
     expect(String(edit?.payload['text'])).toContain('Replaced by a newer call');
     expect(t.lastText()).toContain('58-30');
+  });
+
+  it('after a safe payment: one receipt with an explorer link, and the Pay button is removed', async () => {
+    const t = setup('http://localhost:3000', 'https://tg.cachet.example');
+    await t.contact(USER);
+    const id = await t.openSeal();
+    const ev = { sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) };
+    await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    const paid = JSON.stringify({ type: 'seal.paid', ...ev, txHash: 'ab'.repeat(32) });
+    await t.delivery.handle(paid);
+    await t.delivery.handle(paid); // repeated event: no second receipt
+    const receipts = t.sent().filter((c) => String(c.payload['text']).startsWith('✅ Paid'));
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]?.payload['text']).toBe(
+      '✅ Paid €12.40 (test euro) to <b>Northwind Energy BV</b>.\nNo fee for you: Cachet covered it.',
+    );
+    expect(JSON.stringify(receipts[0]?.payload['reply_markup'])).toContain(
+      `ccdexplorer.io/testnet/transaction/${'ab'.repeat(32)}`,
+    );
+    const markup = t.calls.find((c) => c.method === 'editMessageReplyMarkup');
+    expect(markup?.payload['reply_markup']).toEqual({
+      inline_keyboard: [[{ text: 'Details', web_app: { url: `https://tg.cachet.example/tg/seal/${id}` } }]],
+    });
   });
 
   it('a call that already ended keeps its "Call ended" card when a new call comes later', async () => {

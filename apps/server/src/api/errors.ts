@@ -117,6 +117,43 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     status: 503,
     message: 'Company verification is temporarily unavailable. Please try again shortly.',
   },
+  pay_pass_invalid: {
+    status: 401,
+    message: 'This payment link has expired. Go back to the Cachet bot and tap "Pay safely" again.',
+  },
+  pay_not_requested: { status: 400, message: 'This call did not ask for a payment.' },
+  pay_closed: {
+    status: 409,
+    message: "Paying is closed: this call is no longer verified. Don't pay anyone who asks another way.",
+  },
+  pay_already_paid: { status: 409, message: 'This has already been paid.' },
+  pay_in_progress: {
+    status: 409,
+    message: 'A payment from another wallet is already in progress. Try again in 5 minutes.',
+  },
+  pay_invalid_account: { status: 400, message: "That wallet account can't be used for this payment." },
+  pay_account_not_found: {
+    status: 400,
+    message: "We couldn't find this wallet account on Concordium. Is your wallet set to Testnet?",
+  },
+  pay_insufficient_funds: { status: 400, message: "Your wallet doesn't have enough digital euro for this." },
+  pay_too_many_attempts: {
+    status: 429,
+    message: 'Too many payment tries for this call. Please wait an hour or contact the company.',
+  },
+  pay_unavailable: {
+    status: 503,
+    message: "We can't reach the Concordium network right now. Nothing was paid. Please try again.",
+  },
+  pay_pending: { status: 202, message: 'Your payment is still being confirmed. Please wait a moment.' },
+  pay_failed: {
+    status: 400,
+    message: 'The payment failed on Concordium. No money left your wallet. Please try again.',
+  },
+  pay_mismatch: {
+    status: 400,
+    message: "That transaction isn't the payment for this call.",
+  },
   tg_auth_failed: {
     status: 401,
     message: 'Please open Cachet from the Cachet bot in Telegram.',

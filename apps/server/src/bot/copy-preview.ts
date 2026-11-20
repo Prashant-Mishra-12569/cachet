@@ -14,6 +14,7 @@ const COMPANY = 'Northwind Energy BV';
 const EXAMPLES: { [K in keyof Copy]?: Copy[K] extends (...args: infer A) => string ? A : never } = {
   sealCard: [{ company: COMPANY, message: 'Your November bill is ready', code: '4721', amount: AMOUNT }],
   payButton: [AMOUNT],
+  paid: [AMOUNT, COMPANY],
   sealEnded: [COMPANY, '4721'],
   sealEndedBlocked: [COMPANY, '4721'],
   sealExpired: [COMPANY, '4721'],

@@ -1,4 +1,5 @@
 import { GrammyError, type Bot } from 'grammy';
+import { explorerTxUrl, type Network } from '@cachet/shared';
 import { ulidTime, type Seal } from '@cachet/shared/seal';
 import type { KvStore } from '../infra/kv';
 import type { SealRepo, SealRow } from '../seals/repo';
@@ -7,11 +8,13 @@ import { copy } from './copy';
 import type { PeopleRepo } from './people-repo';
 
 interface SealEvent {
-  type: 'seal.issued' | 'seal.closed';
+  type: 'seal.issued' | 'seal.closed' | 'seal.paid';
   sealId: string;
   phoneHash: string;
   /** seal.closed only: why it ended (e.g. 'completed', 'blocked_by_callee'). */
   reason?: string;
+  /** seal.paid only. */
+  txHash?: string;
 }
 
 /** Where a seal card was sent, so it can be updated when the call ends or is replaced. */
@@ -33,6 +36,8 @@ export interface DeliveryDeps {
   people: Pick<PeopleRepo, 'byPhoneHash'>;
   seals: Pick<SealRepo, 'get' | 'issuedSince'>;
   webOrigin: string;
+  /** For receipt links on the explorer. */
+  network: Network;
   /** https base of the Telegram Mini App; when set, cards open it (Details, Pay safely). */
   miniAppUrl?: string | undefined;
   now?: () => number;
@@ -169,6 +174,37 @@ export function createSealDelivery(deps: DeliveryDeps) {
     if (row) await finish(JSON.parse(raw) as CardRef, row);
   }
 
+  /** A safe payment was confirmed on chain: send a receipt and take the Pay button off the card. */
+  async function paid(ev: SealEvent) {
+    if (!ev.txHash) return;
+    const row = await deps.seals.get(ev.sealId);
+    if (!row) return;
+    const seal = JSON.parse(row.sealJson) as Seal;
+    if (!seal.amount) return;
+    const person = await deps.people.byPhoneHash(row.phoneHash);
+    if (!person) return;
+    if (!(await deps.kv.claim(`bot:paid:${ev.sealId}`, DAY))) return; // one receipt per payment
+    await deps.bot.api.sendMessage(person.chatId, copy.paid(seal.amount, seal.company.legalName), {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[{ text: copy.receiptButton, url: explorerTxUrl(deps.network, ev.txHash) }]],
+      },
+    });
+    const raw = await deps.kv.get(cardKey(ev.sealId));
+    const ref = raw ? (JSON.parse(raw) as CardRef) : null;
+    if (ref && !ref.final && deps.miniAppUrl) {
+      await deps.bot.api
+        .editMessageReplyMarkup(ref.chatId, ref.messageId, {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Details', web_app: { url: `${deps.miniAppUrl}/tg/seal/${ev.sealId}` } }],
+            ],
+          },
+        })
+        .catch(() => undefined);
+    }
+  }
+
   /** Handle one pub/sub message. Exposed for tests. */
   async function handle(raw: string) {
     let ev: SealEvent;
@@ -180,6 +216,7 @@ export function createSealDelivery(deps: DeliveryDeps) {
     try {
       if (ev.type === 'seal.issued') await issued(ev.sealId);
       else if (ev.type === 'seal.closed') await closed(ev.sealId);
+      else if (ev.type === 'seal.paid') await paid(ev);
     } catch (err) {
       log.error('[bot] seal delivery failed:', err instanceof Error ? err.message : err);
     }

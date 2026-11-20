@@ -9,6 +9,8 @@ import { createMemoryConsentsRepo } from '../bot/consents-repo';
 import { createMemoryFamilyRepo } from '../bot/family-repo';
 import { createMemoryPeopleRepo } from '../bot/people-repo';
 import { webAppSecret } from '../miniapp/init-data';
+import { createMemoryPaymentsRepo } from '../pay/repo';
+import { createPayService } from '../pay/service';
 import { createMemorySealRepo } from '../seals/repo';
 import { createSealService } from '../seals/service';
 import { createCompanyProofService } from '../business/company-proof';
@@ -140,6 +142,7 @@ export function makeTestApp(
   });
   const sealRepo = createMemorySealRepo();
   const consentsRepo = createMemoryConsentsRepo();
+  const paymentsRepo = createMemoryPaymentsRepo();
   const signingKey = loadSealSigningKey('22'.repeat(32));
   const checkedMessages: { address: string; message: string }[] = [];
   const seals = createSealService({
@@ -162,10 +165,39 @@ export function makeTestApp(
     webOrigin: WEB_ORIGIN,
     registryUrl: 'https://registry.test',
     consentFor: (phoneHash, businessId) => consentsRepo.statusFor(phoneHash, businessId),
+    paymentFor: (sealId) => paymentsRepo.forSeal(sealId),
     now,
   });
   const people = createMemoryPeopleRepo();
   const familyRepo = createMemoryFamilyRepo((id) => people.byId(id));
+  /** Fake chain for safe payments: balances, what was built, and finalized summaries by tx hash. */
+  const payChain = {
+    balances: new Map<string, bigint>(),
+    built: [] as { sender: string; recipient: string; amount: string; memo: string; tokenId: string }[],
+    summaries: new Map<string, Record<string, unknown> | null>(),
+  };
+  const pay = createPayService({
+    seals: sealRepo,
+    agents: agentRepo,
+    businesses: repo,
+    readAgent: (tokenId) => (options.gateway ?? chain.gateway).readAgent(tokenId),
+    payments: paymentsRepo,
+    kv,
+    pltTokenId: 'EUDemo',
+    decimals: 6,
+    now,
+    chain: {
+      balanceRaw: async (account) => payChain.balances.get(account) ?? null,
+      async buildSponsoredTransfer(input) {
+        payChain.built.push(input);
+        return {
+          json: JSON.stringify({ fake: 'sponsored', ...input }),
+          expiresAt: new Date(now() + 300_000),
+        };
+      },
+      finalizedSummary: async (txHash) => payChain.summaries.get(txHash) ?? null,
+    },
+  });
   const app = createApp({
     network: 'testnet',
     version: 'test',
@@ -180,10 +212,12 @@ export function makeTestApp(
     webOrigin: WEB_ORIGIN,
     secureCookies: false,
     trustProxy: false,
-    miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, now },
+    miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, pay, now },
   });
   return {
     app,
+    payChain,
+    paymentsRepo,
     people,
     familyRepo,
     kv,

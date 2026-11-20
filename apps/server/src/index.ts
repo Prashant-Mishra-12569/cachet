@@ -1,8 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
+import { TokenId } from '@concordium/web-sdk/plt';
 import {
   accountOfCredential,
+  buildSponsoredTransfer,
   createGrpcClient,
+  finalizedSummary,
+  tokenBalanceRaw,
   createCachedMessageVerifier,
   createRegistryClient,
   createTxSender,
@@ -36,6 +40,8 @@ import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
 import { createAnchorWorker } from './worker/anchoring';
+import { createPaymentsRepo } from './pay/repo';
+import { createPayService } from './pay/service';
 
 let env;
 try {
@@ -100,7 +106,9 @@ const signingKey = loadSealSigningKey(env.SEAL_SIGNING_KEY);
 const agentKeys = createCachedMessageVerifier(grpc);
 const sealRepo = createSealRepo(database.db);
 const consentsRepo = createConsentsRepo(database.db);
+const paymentsRepo = createPaymentsRepo(database.db);
 const seals = createSealService({
+  paymentFor: (sealId) => paymentsRepo.forSeal(sealId),
   seals: sealRepo,
   agents: agentRepo,
   businesses: repo,
@@ -133,6 +141,58 @@ setInterval(() => void warmSeals(), 10_000).unref();
 const people = createPeopleRepo(database.db);
 const familyRepo = createFamilyRepo(database.db);
 
+// The sponsor account pays Cachet's on-chain fees: anchoring AND people's safe payments.
+const sponsorKey =
+  env.CCD_SPONSOR_KEY_PATH && env.CCD_SPONSOR_ADDRESS
+    ? await loadAccountKey({
+        path: env.CCD_SPONSOR_KEY_PATH,
+        expectedAddress: env.CCD_SPONSOR_ADDRESS,
+        network: env.CCD_NETWORK,
+        forbiddenDir: fileURLToPath(new URL('../../../', import.meta.url)),
+      })
+    : null;
+
+// Safe payments (sponsored PLT transfers). A sponsored transfer uses the PAYER's nonce, so it never
+// clashes with the sponsor's own anchoring transactions.
+// A wrong decimals setting would make every amount wrong by a factor of 10^n: check it on chain.
+let decimalsOk = true;
+try {
+  const info = await grpc.getTokenInfo(TokenId.fromString(env.PLT_TOKEN_ID));
+  if (info.state.decimals !== env.PLT_DECIMALS) {
+    decimalsOk = false;
+    console.error(
+      `[pay] PLT_DECIMALS=${env.PLT_DECIMALS} but ${env.PLT_TOKEN_ID} has ${info.state.decimals} decimals on chain. Payments disabled.`,
+    );
+  }
+} catch (err) {
+  console.warn('[pay] could not check token decimals on chain:', err instanceof Error ? err.message : err);
+}
+const pay =
+  sponsorKey && env.CCD_SPONSOR_ADDRESS && decimalsOk
+    ? createPayService({
+        seals: sealRepo,
+        agents: agentRepo,
+        businesses: repo,
+        readAgent: (tokenId) => gateway.readAgent(tokenId),
+        payments: paymentsRepo,
+        kv,
+        pltTokenId: env.PLT_TOKEN_ID,
+        decimals: env.PLT_DECIMALS,
+        chain: {
+          balanceRaw: (account, tokenId) => tokenBalanceRaw(grpc, account, tokenId),
+          buildSponsoredTransfer: (input) =>
+            buildSponsoredTransfer({
+              ...input,
+              client: grpc,
+              sponsor: { address: env.CCD_SPONSOR_ADDRESS ?? '', signer: sponsorKey.signer },
+            }),
+          // Under the website proxy's time limit; the Mini App asks again while it's pending.
+          finalizedSummary: (txHash) => finalizedSummary(grpc, txHash, 20_000),
+        },
+      })
+    : undefined;
+if (!pay) console.warn('[pay] safe payments disabled: set CCD_SPONSOR_KEY_PATH and CCD_SPONSOR_ADDRESS');
+
 const app = createApp({
   network: env.CCD_NETWORK,
   version: pkg.version,
@@ -154,6 +214,7 @@ const app = createApp({
           people,
           sealRepo,
           family: familyRepo,
+          pay,
         },
       }
     : {}),
@@ -206,6 +267,7 @@ if (bot) {
     people,
     seals: sealRepo,
     webOrigin: env.WEB_ORIGIN,
+    network: env.CCD_NETWORK,
     miniAppUrl: env.MINIAPP_URL,
   }).start();
 } else {
@@ -215,13 +277,7 @@ if (bot) {
 console.log(`[facilitator] ${FACILITATOR_READY ? 'ready' : 'not built yet (Phase 2)'}`);
 // Anchoring worker: Merkle root of new seals/closings → RegisterData on chain, paid by the sponsor.
 // The sponsor's TxSender must be the ONLY sender for that account in this process (nonce safety).
-if (env.CCD_SPONSOR_KEY_PATH && env.CCD_SPONSOR_ADDRESS) {
-  const sponsorKey = await loadAccountKey({
-    path: env.CCD_SPONSOR_KEY_PATH,
-    expectedAddress: env.CCD_SPONSOR_ADDRESS,
-    network: env.CCD_NETWORK,
-    forbiddenDir: fileURLToPath(new URL('../../../', import.meta.url)),
-  });
+if (sponsorKey && env.CCD_SPONSOR_ADDRESS) {
   const sponsor = createTxSender({
     client: grpc,
     address: env.CCD_SPONSOR_ADDRESS,

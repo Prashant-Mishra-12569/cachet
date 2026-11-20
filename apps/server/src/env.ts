@@ -85,6 +85,8 @@ const EnvSchema = z.object({
   CCD_SPONSOR_KEY_PATH: optionalString,
   /** The Protocol-Level Token used for payments (EUDemo on testnet). */
   PLT_TOKEN_ID: z.string().min(1).default('EUDemo'),
+  /** Decimals of that token (EUDemo: 6). Checked against the chain at start-up. */
+  PLT_DECIMALS: z.coerce.number().int().min(0).max(18).default(6),
 
   /** Concordium Agent Registry service (REST + MCP). */
   AGENT_REGISTRY_API: z.url().default('https://agent-registry-mcp.concordium.com'),

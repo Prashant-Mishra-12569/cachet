@@ -36,6 +36,9 @@ export const copy = {
   payButton: (amount: { value: string; asset: string }) =>
     `Pay ${money(amount).replace(' (test euro)', '')} safely`,
   menuButton: 'Open Cachet',
+  paid: (amount: { value: string; asset: string }, company: string) =>
+    `✅ Paid ${esc(money(amount))} to <b>${esc(company)}</b>.\nNo fee for you: Cachet covered it.`,
+  receiptButton: 'Receipt ↗',
   sealEnded: (company: string, code: string) =>
     `Call ended.\n<b>${esc(company)}</b>'s verified call is over. (Code was ${formatCode(code)}.)`,
   sealEndedBlocked: (company: string, code: string) =>

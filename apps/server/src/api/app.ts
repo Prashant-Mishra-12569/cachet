@@ -12,6 +12,7 @@ import { apiError } from './errors';
 import { agentRoutes } from './routes/agents';
 import { authRoutes } from './routes/auth';
 import { miniAppRoutes, type MiniAppRouteDeps } from './routes/miniapp';
+import { browserPayRoutes } from './routes/pay';
 import { sealRoutes, wellKnownRoutes } from './routes/seals';
 import { businessRoutes } from './routes/business';
 
@@ -31,7 +32,7 @@ export interface AppDeps {
   secureCookies: boolean;
   trustProxy: boolean;
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
-  miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'now'>;
+  miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
   /** Extra health checks (database, verifier); each returns true when healthy. */
   checks?: Record<string, () => Promise<boolean>>;
 }
@@ -60,7 +61,11 @@ export function createApp(deps: AppDeps) {
   app.route('/v1/business', businessRoutes(deps));
   app.route('/v1/agents', agentRoutes(deps));
   app.route('/v1/seals', sealRoutes(deps));
-  if (deps.miniApp) app.route('/v1/tg', miniAppRoutes({ ...deps, ...deps.miniApp }));
+  if (deps.miniApp) {
+    app.route('/v1/tg', miniAppRoutes({ ...deps, ...deps.miniApp }));
+    // Paying from the phone's browser, with a one-time pass from the Mini App.
+    app.route('/v1/pay', browserPayRoutes({ ...deps, pay: deps.miniApp.pay }));
+  }
   app.route('/.well-known', wellKnownRoutes(deps));
 
   app.notFound((c) => apiError(c, 'not_found'));

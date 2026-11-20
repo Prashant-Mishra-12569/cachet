@@ -114,6 +114,8 @@ export interface SealServiceDeps {
   registryUrl?: string;
   /** Where a ledger item sits in an on-chain anchor (from the anchoring worker). */
   inclusion?: (kind: string, refId: string) => Promise<InclusionData | null>;
+  /** The recorded safe payment for a seal, if any (pay service). */
+  paymentFor?: (sealId: string) => Promise<{ txHash: string; paidAt: Date } | null>;
   /** Optional: fetch an account's keys ahead of time (keeps signature checks instant). */
   prefetchAccount?: (address: string) => Promise<void>;
   now?: () => number;
@@ -457,7 +459,14 @@ export function createSealService(deps: SealServiceDeps) {
           ready: view.status === 'open' && recipient !== null && view.company.status === 'active',
         };
       }
-      return { ...view, code: formatCode(seal.code), pay };
+      const payment = deps.paymentFor ? await deps.paymentFor(row.id) : null;
+      if (pay && payment) pay.ready = false; // paid once: never offer to pay again
+      return {
+        ...view,
+        code: formatCode(seal.code),
+        pay,
+        paid: payment ? { txHash: payment.txHash, paidAt: payment.paidAt.toISOString() } : null,
+      };
     },
   };
   return service;
