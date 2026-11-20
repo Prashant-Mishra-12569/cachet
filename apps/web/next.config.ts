@@ -8,7 +8,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@cachet/shared'],
   async rewrites() {
-    return [{ source: '/v1/:path*', destination: `${API_URL}/v1/:path*` }];
+    return [
+      { source: '/v1/:path*', destination: `${API_URL}/v1/:path*` },
+      // Cachet's public seal-signing key, so anyone can verify seals offline.
+      { source: '/.well-known/cachet-keys.json', destination: `${API_URL}/.well-known/cachet-keys.json` },
+    ];
   },
 };
 

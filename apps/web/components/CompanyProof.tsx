@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { NETWORK } from '@/lib/config';
+import { countryName } from '@/lib/format';
 import { requestProof, WalletError } from '@/lib/wallet';
 
 export interface BusinessView {
@@ -15,14 +16,6 @@ export interface BusinessView {
 }
 
 type Step = 'unproven' | 'preparing' | 'approving' | 'verifying';
-
-export function countryName(code: string): string {
-  try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
 
 const STEP_TEXT: Partial<Record<Step, string>> = {
   preparing: 'Preparing your proof request…',

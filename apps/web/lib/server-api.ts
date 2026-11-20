@@ -1,0 +1,62 @@
+import 'server-only';
+
+/** Where the Cachet server runs (server-side fetches can't use the /v1 rewrite). */
+const API_URL = (process.env['API_URL'] ?? 'http://localhost:8787').replace(/\/+$/, '');
+
+export interface PublicSeal {
+  id: string;
+  status: 'open' | 'closed' | 'superseded' | 'expired';
+  signatureValid: boolean;
+  kid: string;
+  sealHash: string;
+  company: {
+    legalName: string;
+    legalCountry: string;
+    account: string;
+    proofTx: string;
+    proofTxUrl: string;
+    status: 'active' | 'suspended' | 'unknown';
+  };
+  agent: {
+    name: string | null;
+    badge: string;
+    tokenId: string;
+    onChain: 'active' | 'switched_off' | 'unknown';
+    badgeCheckUrl: string | null;
+  };
+  purpose: string;
+  message: string;
+  amount: { value: string; asset: string } | null;
+  from: string;
+  consent: string;
+  issuedAt: string;
+  expiresAt: string;
+  closedAt: string | null;
+  anchor:
+    | { status: 'pending' }
+    | {
+        status: 'pending' | 'submitted' | 'finalized' | 'failed';
+        txHash: string | null;
+        txUrl?: string;
+        root: string;
+        itemHash: string;
+        leafIndex: number;
+        itemCount: number;
+        proof: string[];
+        proofValid: boolean;
+      };
+}
+
+const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
+
+/** null = no such seal (or a malformed id). Throws only if the server is unreachable. */
+export async function getPublicSeal(id: string): Promise<PublicSeal | null> {
+  if (!ULID.test(id)) return null;
+  const res = await fetch(`${API_URL}/v1/seals/${id}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Cachet server returned HTTP ${res.status}`);
+  return (await res.json()) as PublicSeal;
+}
