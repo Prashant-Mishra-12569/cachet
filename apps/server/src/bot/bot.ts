@@ -24,6 +24,8 @@ export interface BotDeps {
   businesses: Pick<BusinessRepo, 'searchByName' | 'findById'>;
   agents: Pick<AgentRepo, 'listByBusiness'>;
   kv: KvStore;
+  /** End a blocked company's open seals to a person (seal service). */
+  endSealsFrom?: (phoneHash: string, businessId: string) => Promise<number>;
   phoneCipher: PhoneCipher;
   phonePepper: string;
   now?: () => number;
@@ -205,11 +207,24 @@ export const BOT_COMMANDS = [
   { command: 'stop', description: 'Delete my data' },
 ];
 
-export async function startBotPolling(bot: Bot): Promise<void> {
+export async function startBotPolling(
+  bot: Bot,
+  options: { miniAppUrl?: string | undefined } = {},
+): Promise<void> {
   await bot.init();
   await bot.api
     .setMyCommands(BOT_COMMANDS)
     .catch((err: unknown) => console.error('[bot] setMyCommands failed', err));
+  // The chat's menu button opens the Mini App; without one, it shows the command list again
+  // (so an old, dead tunnel address never stays on people's screens).
+  await bot.api
+    .setChatMenuButton({
+      menu_button: options.miniAppUrl
+        ? { type: 'web_app', text: copy.menuButton, web_app: { url: `${options.miniAppUrl}/tg` } }
+        : { type: 'commands' },
+    })
+    .catch((err: unknown) => console.error('[bot] setChatMenuButton failed', err));
+  if (options.miniAppUrl) console.log(`[bot] Mini App: ${options.miniAppUrl}/tg`);
   console.log(`[bot] @${bot.botInfo.username} connected (long polling)`);
   // Don't await: start() resolves only when the bot stops.
   // Keep messages that arrived while the server was restarting: dropping them would silently

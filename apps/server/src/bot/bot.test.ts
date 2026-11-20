@@ -33,7 +33,7 @@ const botInfo = {
 
 type Call = { method: string; payload: Record<string, unknown> };
 
-function setup(webOrigin = 'http://localhost:3000') {
+function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
   const clock = { t: Date.parse('2026-11-20T10:00:00Z') };
   const now = () => clock.t;
   const people = createMemoryPeopleRepo();
@@ -56,6 +56,28 @@ function setup(webOrigin = 'http://localhost:3000') {
       businesses,
       agents,
       kv,
+      // What the seal service's endForCallee does (tested in seals.test.ts): close + tell the bot.
+      endSealsFrom: async (hash, businessId) => {
+        const open = (await seals.openForPhone(hash, new Date(clock.t))).filter(
+          (r) => r.businessId === businessId,
+        );
+        for (const r of open) {
+          await seals.close(r.id, r.agentId, new Date(clock.t), 'blocked_by_callee', {
+            kind: 'seal_closed',
+            refId: r.id,
+            itemHash: `closed-${r.id}`,
+          });
+          await delivery.handle(
+            JSON.stringify({
+              type: 'seal.closed',
+              sealId: r.id,
+              phoneHash: hash,
+              reason: 'blocked_by_callee',
+            }),
+          );
+        }
+        return open.length;
+      },
       phoneCipher: cipher,
       phonePepper: PEPPER,
       now,
@@ -83,6 +105,7 @@ function setup(webOrigin = 'http://localhost:3000') {
     people,
     seals,
     webOrigin,
+    miniAppUrl,
     now,
     log: { log: () => undefined, error: () => undefined },
   });
@@ -387,6 +410,28 @@ describe('live seal cards', () => {
     expect(t.lastText()).toContain('58-30');
   });
 
+  it('a call that already ended keeps its "Call ended" card when a new call comes later', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const first = await t.openSeal('Northwind Energy BV', '4721');
+    const ev = { sealId: first, phoneHash: phoneHash(PEPPER, NUMBER) };
+    await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    await t.seals.close(first, 'agent-1', new Date(t.clock.t), 'completed', {
+      kind: 'seal_closed',
+      refId: first,
+      itemHash: 'x',
+    });
+    await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
+    t.clock.t += 60_000;
+    const second = await t.openSeal('Northwind Energy BV', '5830');
+    await t.delivery.handle(
+      JSON.stringify({ type: 'seal.issued', sealId: second, phoneHash: phoneHash(PEPPER, NUMBER) }),
+    );
+    const edits = t.calls.filter((c) => c.method === 'editMessageText').map((c) => String(c.payload['text']));
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toContain('Call ended.');
+  });
+
   it('escapes company names (no HTML injection into the card)', async () => {
     const t = setup();
     await t.contact(USER);
@@ -416,6 +461,26 @@ describe('live seal cards', () => {
     expect(live.sent().at(-1)?.payload['reply_markup']).toEqual({
       inline_keyboard: [[{ text: 'Details', url: `https://cachet.example/v/${id2}` }]],
     });
+  });
+
+  it('with the Mini App: [Pay €12.40 safely] [Details] open inside Telegram; gone when the call ends', async () => {
+    const t = setup('http://localhost:3000', 'https://tg.cachet.example');
+    await t.contact(USER);
+    const id = await t.openSeal();
+    const ev = { sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) };
+    await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    expect(t.sent().at(-1)?.payload['reply_markup']).toEqual({
+      inline_keyboard: [
+        [
+          { text: 'Pay €12.40 safely', web_app: { url: `https://tg.cachet.example/tg/pay/${id}` } },
+          { text: 'Details', web_app: { url: `https://tg.cachet.example/tg/seal/${id}` } },
+        ],
+      ],
+    });
+    await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
+    const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
+    // Editing without reply_markup removes the buttons: no Pay button on an ended call.
+    expect(edit?.payload['reply_markup']).toBeUndefined();
   });
 
   it('is wired to the seal channel (pub/sub)', async () => {
@@ -715,6 +780,35 @@ describe('/consent: who may call me', () => {
     expect(JSON.stringify(edit?.payload['reply_markup'])).not.toContain('cons:block:');
     await t.tap(`cons:allow:${biz.id}`);
     expect(await t.consents.statusFor(phoneHash(PEPPER, NUMBER), biz.id)).toBe('granted');
+  });
+
+  it('blocking during an open call ends that call: card updated, /check turns red', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const biz = await t.businesses.upsertVerified({
+      concordiumAccount: '3tCvWPDYchFULvGXKc6Q3MzofopAgMzzL3KeRU66G2dM2LqcNa',
+      legalName: 'Northwind Energy BV',
+      legalCountry: 'NL',
+      issuer: 'x',
+      proofTx: 'a'.repeat(64),
+      requestTx: 'b'.repeat(64),
+      verifiedAt: new Date(),
+    });
+    const id = await t.openSeal('Northwind Energy BV', '4721', 'agent-1', biz.id);
+    await t.delivery.handle(
+      JSON.stringify({ type: 'seal.issued', sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) }),
+    );
+    await t.command('/check');
+    expect(t.lastText()).toContain('has a verified call to you right now');
+
+    await t.tap(`cons:block:${biz.id}`);
+    expect(t.lastText()).toContain('Their open verified call to you is now ended.');
+    const cardEdit = t.calls.find(
+      (c) => c.method === 'editMessageText' && String(c.payload['text']).startsWith('Ended. You blocked'),
+    );
+    expect(cardEdit).toBeDefined();
+    await t.command('/check');
+    expect(t.lastText()).toContain('Not verified');
   });
 
   it('tapping an old button twice does not record the same choice twice', async () => {

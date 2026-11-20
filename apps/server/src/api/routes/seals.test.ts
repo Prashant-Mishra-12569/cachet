@@ -10,88 +10,8 @@ import {
   verifySealSignature,
   type Seal,
 } from '@cachet/shared/seal';
-import { ACCOUNT, OTHER_ACCOUNT, makeTestApp, postJson, signInAsCompany } from '../test-helpers';
-
-type Json = Record<string, unknown>;
-const AGENT_ACCOUNT = '33Rcud5xa7UZT3JQawDw9rhp5X14H8MPmfGR9E1uHQ59mr1jVq';
-const CALLEE = '+919336124858';
-const SIG = { 0: { 0: 'ab'.repeat(64) } };
-
-const errorCode = async (res: Response) => (((await res.clone().json()) as Json)['error'] as Json)['code'];
-
-/** A verified company with one fully active AI caller (token 42), on chain and in Cachet. */
-async function setup(options: Parameters<typeof makeTestApp>[0] = {}, credits = 10) {
-  const ctx = makeTestApp(options);
-  const cookie = await signInAsCompany(ctx.app);
-  const post = (path: string, body: unknown = {}) => ctx.app.request(postJson(path, body, { cookie }));
-  const created = (await (
-    await post('/v1/agents', {
-      name: 'Northwind billing assistant',
-      description: 'Calls customers about their bills.',
-      purposes: ['billing'],
-      language: 'en',
-      callingNumbers: ['+31201234567'],
-      agentAccount: AGENT_ACCOUNT,
-    })
-  ).json()) as { agent: Json };
-  const id = String(created.agent['id']);
-  ctx.chain.registerTx('1'.repeat(64), ACCOUNT, 42n);
-  await post(`/v1/agents/${id}/register/confirm`, { txHash: '1'.repeat(64) });
-  const card = (await (await post(`/v1/agents/${id}/card/prepare`)).json()) as { agent: Json };
-  const uri = String(card.agent['agentUri']);
-  const hash = String(card.agent['metadataHash']);
-  ctx.chain.setUriTx('2'.repeat(64), ACCOUNT, 42n, uri, hash);
-  await post(`/v1/agents/${id}/card/confirm`, { txHash: '2'.repeat(64) });
-
-  ctx.chain.onChain.set(42n, {
-    tokenId: 42n,
-    owner: ACCOUNT,
-    agentUri: uri,
-    metadataHash: hash,
-    agentWallet: ACCOUNT,
-    status: 'Active',
-  });
-  if (credits > 0)
-    await ctx.sealRepo.addCredits({
-      agentId: id,
-      credits,
-      amount: '0.10',
-      asset: 'EUDemo',
-      txHash: 'f'.repeat(64),
-    });
-
-  const nowS = () => Math.floor(ctx.clock.t / 1000);
-  const request = (over: Json = {}) => ({
-    v: 'cachet-seal-request/1',
-    badge: 'JyP9Badge42',
-    agentAccount: AGENT_ACCOUNT,
-    to: CALLEE,
-    from: '+31201234567',
-    purpose: 'billing',
-    message: 'Your November bill is ready',
-    nonce: randomBytes(16).toString('hex'),
-    ts: nowS(),
-    ...over,
-  });
-  const seal = (req: Json = request(), signature: unknown = SIG) =>
-    ctx.app.request(postJson('/v1/seals', { request: req, signature }));
-  const close = (sealId: string, over: Json = {}) =>
-    ctx.app.request(
-      postJson(`/v1/seals/${sealId}/close`, {
-        request: {
-          v: 'cachet-seal-close/1',
-          sealId,
-          agentAccount: AGENT_ACCOUNT,
-          reason: 'completed',
-          nonce: randomBytes(16).toString('hex'),
-          ts: nowS(),
-          ...over,
-        },
-        signature: SIG,
-      }),
-    );
-  return { ...ctx, agentId: id, request, seal, close };
-}
+import { AGENT_ACCOUNT, CALLEE, SIG, errorCode, setupSealing as setup, type Json } from '../seal-test-setup';
+import { ACCOUNT, OTHER_ACCOUNT, postJson } from '../test-helpers';
 
 describe('POST /v1/seals: a sealed call', () => {
   it('issues a signed seal with a 4-digit code and the AI first line', async () => {
@@ -183,6 +103,31 @@ describe('consent ("who may call me" in the bot)', () => {
     const body = (await (await ctx.seal()).json()) as Json;
     const stored = JSON.parse(ctx.sealRepo.sealRows.get(String(body['sealId']))?.sealJson ?? '{}') as Seal;
     expect(stored.consent).toBe('granted');
+  });
+
+  it("blocking ends that company's open seal to the person at once (and only that one)", async () => {
+    const ctx = await setup();
+    const mine = (await (await ctx.seal()).json()) as Json;
+    const other = (await (await ctx.seal(ctx.request({ to: '+919999999999' }))).json()) as Json;
+    const biz = await ctx.repo.findByAccount(ACCOUNT);
+    const hash = phoneHash(PEPPER, CALLEE);
+    await ctx.consentsRepo.set(hash, biz?.id ?? '', 'revoked', new Date());
+
+    expect(await ctx.seals.endForCallee(hash, biz?.id ?? '', 'blocked_by_callee')).toBe(1);
+    const row = ctx.sealRepo.sealRows.get(String(mine['sealId']));
+    expect(row?.status).toBe('closed');
+    expect(row?.closeReason).toBe('blocked_by_callee');
+    // Someone else's call is untouched.
+    expect(ctx.sealRepo.sealRows.get(String(other['sealId']))?.status).toBe('open');
+    // Recorded for the on-chain ledger, and the bot is told (with the reason, never the number).
+    expect(ctx.sealRepo.ledger.map((l) => l.kind)).toEqual(['seal', 'seal', 'seal_closed']);
+    const last = JSON.parse(String(ctx.kv.published.at(-1)?.message)) as Json;
+    expect(last).toMatchObject({ type: 'seal.closed', sealId: mine['sealId'], reason: 'blocked_by_callee' });
+    // The public page no longer calls it open; a second run finds nothing to end.
+    expect(
+      ((await (await ctx.app.request(`/v1/seals/${String(mine['sealId'])}`)).json()) as Json)['status'],
+    ).toBe('closed');
+    expect(await ctx.seals.endForCallee(hash, biz?.id ?? '', 'blocked_by_callee')).toBe(0);
   });
 
   it('no choice yet → consent: none_recorded (we never imply consent)', async () => {

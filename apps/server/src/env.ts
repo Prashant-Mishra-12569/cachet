@@ -59,6 +59,20 @@ const EnvSchema = z.object({
   CCD_VERIFIER_ADDRESS: optionalAccount,
 
   TELEGRAM_BOT_TOKEN: optionalString,
+  /**
+   * Public https address of the website for the Telegram Mini App (Telegram only opens https).
+   * Local testing: a tunnel to http://localhost:3000. Empty = no Mini App buttons.
+   */
+  MINIAPP_URL: z.preprocess(
+    emptyToUndefined,
+    z
+      .url()
+      .optional()
+      .refine((v) => v === undefined || v.startsWith('https://'), {
+        message: 'must start with https:// (Telegram only opens Mini Apps over https)',
+      })
+      .transform((v) => v?.replace(/\/+$/, '')),
+  ),
 
   /** Seal secrets: generate with `pnpm gen-secrets`. */
   SEAL_SIGNING_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),

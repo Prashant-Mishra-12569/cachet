@@ -114,20 +114,27 @@ export function sealRoutes(deps: SealRouteDeps) {
     try {
       const view = await deps.seals.publicView(id);
       c.header('Cache-Control', 'no-store');
-      return c.json({
-        ...view,
-        company: { ...view.company, proofTxUrl: explorerTxUrl(deps.network, view.company.proofTx) },
-        anchor:
-          'txHash' in view.anchor && view.anchor.txHash
-            ? { ...view.anchor, txUrl: explorerTxUrl(deps.network, view.anchor.txHash) }
-            : view.anchor,
-      });
+      return c.json(withExplorerLinks(view, deps.network));
     } catch (err) {
       return fail(c, err);
     }
   });
 
   return app;
+}
+
+type SealView = Awaited<ReturnType<SealService['publicView']>>;
+
+/** Add CCDScan links for the company proof and the on-chain record. */
+export function withExplorerLinks<V extends SealView>(view: V, network: Network) {
+  return {
+    ...view,
+    company: { ...view.company, proofTxUrl: explorerTxUrl(network, view.company.proofTx) },
+    anchor:
+      'txHash' in view.anchor && view.anchor.txHash
+        ? { ...view.anchor, txUrl: explorerTxUrl(network, view.anchor.txHash) }
+        : view.anchor,
+  };
 }
 
 /** GET /.well-known/cachet-keys.json — anyone can verify seal signatures offline with these keys. */

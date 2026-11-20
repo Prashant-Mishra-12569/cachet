@@ -178,7 +178,65 @@ export function createSealService(deps: SealServiceDeps) {
     return { business, onChain };
   }
 
-  return {
+  /** Tell the bot / lamp a seal ended. Never blocks or fails the caller. */
+  function publishClosed(row: Pick<SealRow, 'id' | 'phoneHash'>, reason: string) {
+    deps.kv
+      .publish(
+        SEAL_CHANNEL,
+        JSON.stringify({ type: 'seal.closed', sealId: row.id, phoneHash: row.phoneHash, reason }),
+      )
+      .catch((err: unknown) => console.error('[seals] publish failed', err));
+  }
+
+  /** Share-safe view of a seal: no phone data, no call code. */
+  async function viewOf(row: SealRow) {
+    const seal = JSON.parse(row.sealJson) as Seal;
+    const agent = await deps.agents.findById(row.agentId);
+    const business = await deps.businesses.findById(row.businessId);
+    const included = deps.inclusion ? await deps.inclusion('seal', row.id) : null;
+    // Live: is the AI caller still switched on in the Concordium Agent Registry right now?
+    let onChain: 'active' | 'switched_off' | 'unknown' = 'unknown';
+    if (agent?.tokenId != null) {
+      try {
+        const live = await liveAgent(agent.tokenId);
+        onChain =
+          live && live.status === 'Active' && live.owner === business?.concordiumAccount
+            ? 'active'
+            : 'switched_off';
+      } catch {
+        onChain = 'unknown'; // chain unreachable: say so, never guess
+      }
+    }
+    return {
+      id: row.id,
+      status: statusOf(row, nowMs()),
+      signatureValid: verifySealSignature(seal, deps.signingKey.publicKey),
+      kid: seal.kid,
+      sealHash: row.sealHash,
+      company: { ...seal.company, status: business?.status ?? 'unknown' },
+      agent: {
+        name: agent?.name ?? null,
+        badge: seal.agent.badge,
+        tokenId: seal.agent.tokenId,
+        onChain,
+        /** Concordium's own, independent badge checker. */
+        badgeCheckUrl: deps.registryUrl
+          ? `${deps.registryUrl}/v1/check-badge/${seal.agent.badge.split(':').at(-1) ?? ''}`
+          : null,
+      },
+      purpose: seal.purpose,
+      message: seal.message,
+      amount: seal.amount ?? null,
+      from: seal.from,
+      consent: seal.consent,
+      issuedAt: new Date(seal.issuedAt * 1000).toISOString(),
+      expiresAt: new Date(seal.expiresAt * 1000).toISOString(),
+      closedAt: row.closedAt?.toISOString() ?? null,
+      anchor: included ? proofView(included, row.sealHash) : { status: 'pending' as const },
+    };
+  }
+
+  const service = {
     /**
      * Keep the hot path off the chain: refresh every active agent's on-chain record (and its AI's
      * account keys) in the background. Call at start-up and every ~10 s.
@@ -324,65 +382,85 @@ export function createSealService(deps: SealServiceDeps) {
         itemHash: sha256Hex(canonicalize(item)),
       });
       if (!closed) throw new SealError('seal_not_open');
-      deps.kv
-        .publish(
-          SEAL_CHANNEL,
-          JSON.stringify({ type: 'seal.closed', sealId: row.id, phoneHash: row.phoneHash }),
-        )
-        .catch((err: unknown) => console.error('[seals] publish failed', err));
+      publishClosed(row, request.reason);
       return { sealId: row.id, status: 'closed' as const, closedAt: closedAt.toISOString() };
+    },
+
+    /**
+     * The person blocked this company (/consent): end its open seals to them right away, so /check
+     * never shows a blocked company as green. Returns how many were ended.
+     */
+    async endForCallee(calleeHash: string, businessId: string, reason: 'blocked_by_callee') {
+      const now = new Date(nowMs());
+      const open = (await deps.seals.openForPhone(calleeHash, now)).filter(
+        (r) => r.businessId === businessId,
+      );
+      let ended = 0;
+      for (const row of open) {
+        const item = { v: 'cachet-seal-closed/1', sealId: row.id, closedAt: now.toISOString(), reason };
+        const closed = await deps.seals.close(row.id, row.agentId, now, reason, {
+          kind: 'seal_closed',
+          refId: row.id,
+          itemHash: sha256Hex(canonicalize(item)),
+        });
+        if (!closed) continue; // the AI closed it at the same moment: already ended
+        ended++;
+        publishClosed(row, reason);
+      }
+      return ended;
     },
 
     /** Public, share-safe view: no phone data, no call code. */
     async publicView(id: string) {
       const row = await deps.seals.get(id);
       if (!row) throw new SealError('seal_not_found');
+      return viewOf(row);
+    },
+
+    /**
+     * The seal as the CALLED PERSON sees it (Telegram Mini App): the public view plus the call code
+     * and, if money is asked, who would be paid. Anyone else gets "not found" (never "forbidden",
+     * so seal ids can't be probed for whose they are).
+     */
+    async calleeView(id: string, calleeHash: string) {
+      const row = await deps.seals.get(id);
+      if (!row || row.phoneHash !== calleeHash) throw new SealError('seal_not_found');
+      const view = await viewOf(row);
       const seal = JSON.parse(row.sealJson) as Seal;
-      const agent = await deps.agents.findById(row.agentId);
-      const business = await deps.businesses.findById(row.businessId);
-      const included = deps.inclusion ? await deps.inclusion('seal', row.id) : null;
-      // Live: is the AI caller still switched on in the Concordium Agent Registry right now?
-      let onChain: 'active' | 'switched_off' | 'unknown' = 'unknown';
-      if (agent?.tokenId != null) {
-        try {
-          const live = await liveAgent(agent.tokenId);
-          onChain =
-            live && live.status === 'Active' && live.owner === business?.concordiumAccount
-              ? 'active'
-              : 'switched_off';
-        } catch {
-          onChain = 'unknown'; // chain unreachable: say so, never guess
+      let pay: {
+        amount: { value: string; asset: string };
+        company: string;
+        /** The AI caller's agentWallet, read from the Concordium Agent Registry (never from the call). */
+        recipient: string | null;
+        fee: 'free';
+        /** Paying is possible only while the call is verified and the wallet is known. */
+        ready: boolean;
+      } | null = null;
+      if (seal.amount) {
+        const agent = await deps.agents.findById(row.agentId);
+        let recipient: string | null = null;
+        if (agent?.tokenId != null) {
+          try {
+            const live = await liveAgent(agent.tokenId);
+            if (live && live.status === 'Active' && live.owner === seal.company.account) {
+              recipient = live.agentWallet ?? null;
+            }
+          } catch {
+            recipient = null; // chain unreachable: no recipient means no payment, never a guess
+          }
         }
+        pay = {
+          amount: seal.amount,
+          company: seal.company.legalName,
+          recipient,
+          fee: 'free',
+          ready: view.status === 'open' && recipient !== null && view.company.status === 'active',
+        };
       }
-      return {
-        id: row.id,
-        status: statusOf(row, nowMs()),
-        signatureValid: verifySealSignature(seal, deps.signingKey.publicKey),
-        kid: seal.kid,
-        sealHash: row.sealHash,
-        company: { ...seal.company, status: business?.status ?? 'unknown' },
-        agent: {
-          name: agent?.name ?? null,
-          badge: seal.agent.badge,
-          tokenId: seal.agent.tokenId,
-          onChain,
-          /** Concordium's own, independent badge checker. */
-          badgeCheckUrl: deps.registryUrl
-            ? `${deps.registryUrl}/v1/check-badge/${seal.agent.badge.split(':').at(-1) ?? ''}`
-            : null,
-        },
-        purpose: seal.purpose,
-        message: seal.message,
-        amount: seal.amount ?? null,
-        from: seal.from,
-        consent: seal.consent,
-        issuedAt: new Date(seal.issuedAt * 1000).toISOString(),
-        expiresAt: new Date(seal.expiresAt * 1000).toISOString(),
-        closedAt: row.closedAt?.toISOString() ?? null,
-        anchor: included ? proofView(included, row.sealHash) : { status: 'pending' as const },
-      };
+      return { ...view, code: formatCode(seal.code), pay };
     },
   };
+  return service;
 }
 
 export type SealService = ReturnType<typeof createSealService>;

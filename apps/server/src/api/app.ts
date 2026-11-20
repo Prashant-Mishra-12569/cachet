@@ -11,6 +11,7 @@ import type { KvStore } from '../infra/kv';
 import { apiError } from './errors';
 import { agentRoutes } from './routes/agents';
 import { authRoutes } from './routes/auth';
+import { miniAppRoutes, type MiniAppRouteDeps } from './routes/miniapp';
 import { sealRoutes, wellKnownRoutes } from './routes/seals';
 import { businessRoutes } from './routes/business';
 
@@ -29,6 +30,8 @@ export interface AppDeps {
   webOrigin: string;
   secureCookies: boolean;
   trustProxy: boolean;
+  /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
+  miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'now'>;
   /** Extra health checks (database, verifier); each returns true when healthy. */
   checks?: Record<string, () => Promise<boolean>>;
 }
@@ -57,6 +60,7 @@ export function createApp(deps: AppDeps) {
   app.route('/v1/business', businessRoutes(deps));
   app.route('/v1/agents', agentRoutes(deps));
   app.route('/v1/seals', sealRoutes(deps));
+  if (deps.miniApp) app.route('/v1/tg', miniAppRoutes({ ...deps, ...deps.miniApp }));
   app.route('/.well-known', wellKnownRoutes(deps));
 
   app.notFound((c) => apiError(c, 'not_found'));

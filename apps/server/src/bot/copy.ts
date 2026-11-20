@@ -19,7 +19,6 @@ export const copy = {
   protected:
     "🔒 You're protected.\nWhen a verified company's AI calls you, I'll send a green card here.\n<b>No card? Treat it as a scam.</b>",
   needNumber: 'Share your number first, then I can check calls for you.',
-  checkButton: 'Is this call real?',
 
   sealCard: (s: {
     company: string;
@@ -34,8 +33,13 @@ export const copy = {
       ...(s.amount ? [`Amount: ${esc(money(s.amount))}`] : []),
       `Your code: <b>${formatCode(s.code)}</b>`,
     ].join('\n'),
+  payButton: (amount: { value: string; asset: string }) =>
+    `Pay ${money(amount).replace(' (test euro)', '')} safely`,
+  menuButton: 'Open Cachet',
   sealEnded: (company: string, code: string) =>
     `Call ended.\n<b>${esc(company)}</b>'s verified call is over. (Code was ${formatCode(code)}.)`,
+  sealEndedBlocked: (company: string, code: string) =>
+    `Ended. You blocked <b>${esc(company)}</b>, so this call is no longer verified. (Code was ${formatCode(code)}.)`,
   sealReplaced: (company: string) => `Replaced by a newer call from <b>${esc(company)}</b>.`,
 
   checkGreen: (s: { company: string; code: string }) =>
@@ -49,13 +53,16 @@ export const copy = {
   help: [
     'I check AI phone calls for you.',
     '/check: Is this call real?',
-    '/privacy: what I store',
-    '/stop: delete my data',
+    '/history: my sealed calls',
+    '/company: is a company verified?',
+    '/consent: who may call me',
+    '/family: protect someone you love',
+    '/privacy: what I store · /stop: delete my data',
     '',
     'I will <b>never</b> ask for OTPs, passwords, card numbers or seed phrases.',
   ].join('\n'),
   privacy:
-    '🔒 I store your number only encrypted, plus a secret fingerprint to match calls.\nI never hear or record your calls.\n/stop deletes your data at any time.',
+    '🔒 I store your number only encrypted, plus a secret fingerprint to match calls.\nI never hear or record your calls.\n/stop deletes everything: your number, family links and allow/block choices.',
   stopConfirm: 'Delete your data? You will stop getting seal cards.',
   stopYes: 'Delete my data',
   stopNo: 'Keep',
@@ -83,7 +90,6 @@ export const copy = {
   familyInviteGone: 'This invite link has expired or was already used. Ask for a new one.',
   familySelf: "That's your own invite link. Send it to the person you want to protect.",
   familyAlready: "You're already linked.",
-  familyNone: 'Nobody is linked yet.',
   familyList: (protects: string[], protectedBy: string[]) =>
     [
       protects.length ? `You protect: ${protects.map((n) => `<b>${esc(n)}</b>`).join(', ')}` : '',
@@ -125,8 +131,12 @@ export const copy = {
     `• <b>${esc(name)}</b>: ${status === 'granted' ? 'allowed' : status === 'revoked' ? 'blocked' : 'not set'}`,
   consentBlockButton: (name: string) => `Block ${name}`,
   consentAllowButton: (name: string) => `Allow ${name}`,
-  consentBlocked: (name: string) =>
-    `Blocked. <b>${esc(name)}</b>'s AI callers can no longer get a seal to call you. Changed your mind? Tap Allow above.`,
+  consentBlocked: (name: string, endedCalls = 0) =>
+    [
+      `Blocked. <b>${esc(name)}</b>'s AI callers can no longer get a seal to call you.`,
+      ...(endedCalls > 0 ? ['Their open verified call to you is now ended.'] : []),
+      'Changed your mind? Tap Allow above.',
+    ].join('\n'),
   consentAllowed: (name: string) =>
     `Allowed. Seals from <b>${esc(name)}</b> will now say you agreed to their calls.`,
 } as const;

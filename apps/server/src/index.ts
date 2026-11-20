@@ -28,6 +28,7 @@ import { createReportsRepo } from './bot/reports-repo';
 import { createCompanyProofService } from './business/company-proof';
 import { createBusinessRepo } from './business/repo';
 import { loadEnv } from './env';
+import { webAppSecret } from './miniapp/init-data';
 import { FACILITATOR_READY } from './facilitator/index';
 import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
@@ -129,6 +130,9 @@ const warmSeals = () =>
 await warmSeals().then((n) => typeof n === 'number' && console.log(`[seals] warmed ${n} active agent(s)`));
 setInterval(() => void warmSeals(), 10_000).unref();
 
+const people = createPeopleRepo(database.db);
+const familyRepo = createFamilyRepo(database.db);
+
 const app = createApp({
   network: env.CCD_NETWORK,
   version: pkg.version,
@@ -143,6 +147,16 @@ const app = createApp({
   webOrigin: env.WEB_ORIGIN,
   secureCookies: env.NODE_ENV === 'production',
   trustProxy: env.TRUST_PROXY,
+  ...(env.TELEGRAM_BOT_TOKEN
+    ? {
+        miniApp: {
+          miniAppSecret: webAppSecret(env.TELEGRAM_BOT_TOKEN),
+          people,
+          sealRepo,
+          family: familyRepo,
+        },
+      }
+    : {}),
   checks: { database: () => database.ping(), verifier: () => verifier.health() },
 });
 
@@ -166,27 +180,34 @@ if (!(await verifier.health())) {
   );
 }
 
-const people = createPeopleRepo(database.db);
 const bot = env.TELEGRAM_BOT_TOKEN
   ? createBot(env.TELEGRAM_BOT_TOKEN, {
       people,
       reports: createReportsRepo(database.db),
       seals: sealRepo,
-      family: createFamilyRepo(database.db),
+      family: familyRepo,
       consents: consentsRepo,
       businesses: repo,
       agents: agentRepo,
       kv,
+      endSealsFrom: (phoneHash, businessId) => seals.endForCallee(phoneHash, businessId, 'blocked_by_callee'),
       phoneCipher: createPhoneCipher(env.PHONE_ENC_KEY),
       phonePepper: env.PHONE_PEPPER,
     })
   : undefined;
 if (bot) {
-  startBotPolling(bot).catch((err: unknown) => {
+  startBotPolling(bot, { miniAppUrl: env.MINIAPP_URL }).catch((err: unknown) => {
     console.error('[bot] could not start. Check TELEGRAM_BOT_TOKEN in .env.', err);
   });
   // Seal cards: the bot hears every new / closed seal instantly (Redis pub/sub).
-  await createSealDelivery({ bot, kv, people, seals: sealRepo, webOrigin: env.WEB_ORIGIN }).start();
+  await createSealDelivery({
+    bot,
+    kv,
+    people,
+    seals: sealRepo,
+    webOrigin: env.WEB_ORIGIN,
+    miniAppUrl: env.MINIAPP_URL,
+  }).start();
 } else {
   console.log('[bot] skipped: TELEGRAM_BOT_TOKEN is not set in .env');
 }

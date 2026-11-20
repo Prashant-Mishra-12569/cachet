@@ -16,6 +16,8 @@ export interface InfoDeps {
   agents: Pick<AgentRepo, 'listByBusiness'>;
   consents: ConsentsRepo;
   kv: KvStore;
+  /** End a blocked company's open seals to this person now (seal service). Returns how many. */
+  endSealsFrom?: (phoneHash: string, businessId: string) => Promise<number>;
   now: () => number;
 }
 
@@ -147,11 +149,19 @@ export function createInfoFeature(deps: InfoDeps) {
         await deps.consents.set(person.phoneHash, businessId, status, new Date(deps.now()));
       }
       company.status = status;
+      // A blocked company must not keep a green call open to this person.
+      let ended = 0;
+      if (status === 'revoked' && deps.endSealsFrom) {
+        ended = await deps.endSealsFrom(person.phoneHash, businessId).catch((err: unknown) => {
+          console.error('[bot] ending seals after block failed', err);
+          return 0;
+        });
+      }
       // Update the list in place so it never shows an old state (and the undo button is right there).
       const { text, kb } = consentView(companies);
       await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb }).catch(() => undefined);
       await ctx.reply(
-        status === 'revoked' ? copy.consentBlocked(company.name) : copy.consentAllowed(company.name),
+        status === 'revoked' ? copy.consentBlocked(company.name, ended) : copy.consentAllowed(company.name),
         {
           parse_mode: 'HTML',
         },

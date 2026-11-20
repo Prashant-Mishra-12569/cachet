@@ -6,6 +6,9 @@ import { createAgentService } from '../agents/service';
 import { loadSealSigningKey } from '@cachet/shared/seal';
 import { createAuthService, type VerifyMessage } from '../auth/service';
 import { createMemoryConsentsRepo } from '../bot/consents-repo';
+import { createMemoryFamilyRepo } from '../bot/family-repo';
+import { createMemoryPeopleRepo } from '../bot/people-repo';
+import { webAppSecret } from '../miniapp/init-data';
 import { createMemorySealRepo } from '../seals/repo';
 import { createSealService } from '../seals/service';
 import { createCompanyProofService } from '../business/company-proof';
@@ -23,6 +26,8 @@ export const SIGNATURE = { 0: { 0: 'ab'.repeat(64) } };
 export const CRED_ID = 'a1'.repeat(48);
 export const REQUEST_TX = 'bd45a8d18ff67eba0e018bdd370f55ed6c317cc2a6e0098f29b69881d416096c';
 export const AUDIT_TX = 'cc'.repeat(32);
+/** The Mini App HMAC key for the fake bot token used in tests. */
+export const TG_SECRET = webAppSecret('123456:TEST-BOT-TOKEN');
 
 /** A presentation shaped like the verifier's documented example, revealing company attributes. */
 export function companyPresentation(
@@ -159,6 +164,8 @@ export function makeTestApp(
     consentFor: (phoneHash, businessId) => consentsRepo.statusFor(phoneHash, businessId),
     now,
   });
+  const people = createMemoryPeopleRepo();
+  const familyRepo = createMemoryFamilyRepo((id) => people.byId(id));
   const app = createApp({
     network: 'testnet',
     version: 'test',
@@ -173,9 +180,12 @@ export function makeTestApp(
     webOrigin: WEB_ORIGIN,
     secureCookies: false,
     trustProxy: false,
+    miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, now },
   });
   return {
     app,
+    people,
+    familyRepo,
     kv,
     clock,
     repo,
@@ -183,6 +193,7 @@ export function makeTestApp(
     cardHost,
     agentRepo,
     sealRepo,
+    seals,
     signingKey,
     checkedMessages,
     consentsRepo,

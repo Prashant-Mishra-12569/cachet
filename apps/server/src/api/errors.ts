@@ -117,6 +117,18 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     status: 503,
     message: 'Company verification is temporarily unavailable. Please try again shortly.',
   },
+  tg_auth_failed: {
+    status: 401,
+    message: 'Please open Cachet from the Cachet bot in Telegram.',
+  },
+  tg_session_expired: {
+    status: 401,
+    message: 'This screen was open too long. Close it and open it again from the Cachet bot.',
+  },
+  tg_not_registered: {
+    status: 403,
+    message: 'Open the Cachet bot in Telegram and share your number first.',
+  },
   forbidden_origin: { status: 403, message: 'This request must come from the Cachet website.' },
   not_found: { status: 404, message: 'This page does not exist.' },
   rate_limited: { status: 429, message: 'Too many tries. Please wait a few minutes and try again.' },
