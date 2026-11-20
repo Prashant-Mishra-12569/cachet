@@ -29,6 +29,20 @@
       "when": 1795104626817,
       "tag": "0003_one_open_seal_per_callee",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795181722208,
+      "tag": "0004_people",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795181788778,
+      "tag": "0005_reports",
+      "breakpoints": true
     }
   ]
 }

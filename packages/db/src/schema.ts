@@ -226,6 +226,42 @@ export const creditPurchases = pgTable('credit_purchases', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * People protected by Cachet (Telegram users who shared their own number).
+ * The number is stored ONLY encrypted (AES-256-GCM) plus a keyed fingerprint for lookups.
+ */
+export const people = pgTable('people', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tgUserId: bigint('tg_user_id', { mode: 'number' }).notNull().unique(),
+  /** Private chat with the bot (where seal cards go). */
+  chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+  /** hmac-sha256 fingerprint of the E.164 number (same as seals.phone_hash). One person per number. */
+  phoneHash: text('phone_hash').notNull().unique(),
+  /** AES-256-GCM(iv | ciphertext | tag), base64url. */
+  phoneEnc: text('phone_enc').notNull(),
+  lang: text('lang').notNull().default('en'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PersonRow = typeof people.$inferSelect;
+
+/** "Report this call": a person flags a call. Deleted with the person on /stop (the anchored hash stays). */
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    personId: uuid('person_id').references(() => people.id, { onDelete: 'cascade' }),
+    phoneHash: text('phone_hash').notNull(),
+    /** Set when the reported call had a seal. */
+    sealId: text('seal_id'),
+    /** e.g. "unverified_call" */
+    reason: text('reason').notNull(),
+    claimedCompany: text('claimed_company'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('reports_phone_idx').on(t.phoneHash, t.createdAt)],
+);
 export type SealRow = typeof seals.$inferSelect;
 export type AnchorRow = typeof anchors.$inferSelect;
 export type LedgerItemRow = typeof ledgerItems.$inferSelect;
