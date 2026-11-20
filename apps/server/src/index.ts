@@ -98,6 +98,7 @@ const seals = createSealService({
   gateway,
   verifyMessage: agentKeys,
   inclusion: (kind, refId) => anchorRepo.inclusion(kind, refId),
+  registryUrl: registry.baseUrl,
   prefetchAccount: agentKeys.prefetch,
   kv,
   signingKey,

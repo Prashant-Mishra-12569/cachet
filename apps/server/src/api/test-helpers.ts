@@ -153,6 +153,7 @@ export function makeTestApp(
     network: 'testnet',
     pltTokenId: 'EUDemo',
     webOrigin: WEB_ORIGIN,
+    registryUrl: 'https://registry.test',
     now,
   });
   const app = createApp({

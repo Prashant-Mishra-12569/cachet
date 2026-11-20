@@ -355,6 +355,28 @@ describe('GET /v1/seals/:id (public, share-safe)', () => {
     expect(text).not.toContain('9336124858');
   });
 
+  it('shows the live on-chain status of the AI caller and a link to check the badge independently', async () => {
+    const ctx = await setup();
+    const id = String(((await (await ctx.seal()).json()) as Json)['sealId']);
+    const view = (await (await ctx.app.request(`/v1/seals/${id}`)).json()) as { agent: Json; company: Json };
+    expect(view.agent).toMatchObject({
+      onChain: 'active',
+      badgeCheckUrl: 'https://registry.test/v1/check-badge/JyP9Badge42',
+    });
+    expect(view.company['status']).toBe('active');
+  });
+
+  it('says "switched_off" once the agent is revoked on chain (after the 15 s cache)', async () => {
+    const ctx = await setup();
+    const id = String(((await (await ctx.seal()).json()) as Json)['sealId']);
+    const live = ctx.chain.onChain.get(42n);
+    if (!live) throw new Error('setup');
+    ctx.chain.onChain.set(42n, { ...live, status: 'Revoked' });
+    ctx.clock.t += 15_001;
+    const view = (await (await ctx.app.request(`/v1/seals/${id}`)).json()) as { agent: Json };
+    expect(view.agent['onChain']).toBe('switched_off');
+  });
+
   it('shows "expired" after 15 minutes', async () => {
     const ctx = await setup();
     const id = String(((await (await ctx.seal()).json()) as Json)['sealId']);

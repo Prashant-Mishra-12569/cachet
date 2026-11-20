@@ -107,6 +107,8 @@ export interface SealServiceDeps {
   maxSkewSeconds?: number;
   /** How long a live on-chain agent read is reused. Revocation shows up within this time. */
   chainCacheMs?: number;
+  /** Public Agent Registry service URL, for "check this badge yourself" links. */
+  registryUrl?: string;
   /** Where a ledger item sits in an on-chain anchor (from the anchoring worker). */
   inclusion?: (kind: string, refId: string) => Promise<InclusionData | null>;
   /** Optional: fetch an account's keys ahead of time (keeps signature checks instant). */
@@ -329,15 +331,38 @@ export function createSealService(deps: SealServiceDeps) {
       if (!row) throw new SealError('seal_not_found');
       const seal = JSON.parse(row.sealJson) as Seal;
       const agent = await deps.agents.findById(row.agentId);
+      const business = await deps.businesses.findById(row.businessId);
       const included = deps.inclusion ? await deps.inclusion('seal', row.id) : null;
+      // Live: is the AI caller still switched on in the Concordium Agent Registry right now?
+      let onChain: 'active' | 'switched_off' | 'unknown' = 'unknown';
+      if (agent?.tokenId != null) {
+        try {
+          const live = await liveAgent(agent.tokenId);
+          onChain =
+            live && live.status === 'Active' && live.owner === business?.concordiumAccount
+              ? 'active'
+              : 'switched_off';
+        } catch {
+          onChain = 'unknown'; // chain unreachable: say so, never guess
+        }
+      }
       return {
         id: row.id,
         status: statusOf(row, nowMs()),
         signatureValid: verifySealSignature(seal, deps.signingKey.publicKey),
         kid: seal.kid,
         sealHash: row.sealHash,
-        company: seal.company,
-        agent: { name: agent?.name ?? null, badge: seal.agent.badge, tokenId: seal.agent.tokenId },
+        company: { ...seal.company, status: business?.status ?? 'unknown' },
+        agent: {
+          name: agent?.name ?? null,
+          badge: seal.agent.badge,
+          tokenId: seal.agent.tokenId,
+          onChain,
+          /** Concordium's own, independent badge checker. */
+          badgeCheckUrl: deps.registryUrl
+            ? `${deps.registryUrl}/v1/check-badge/${seal.agent.badge.split(':').at(-1) ?? ''}`
+            : null,
+        },
         purpose: seal.purpose,
         message: seal.message,
         amount: seal.amount ?? null,
