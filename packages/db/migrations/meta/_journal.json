@@ -50,6 +50,13 @@
       "when": 1795182595827,
       "tag": "0006_guardians_consents",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795186416050,
+      "tag": "0007_seals_issued_idx",
+      "breakpoints": true
     }
   ]
 }

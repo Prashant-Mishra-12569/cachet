@@ -168,6 +168,8 @@ export const seals = pgTable(
   (t) => [
     index('seals_phone_open_idx').on(t.phoneHash, t.expiresAt),
     index('seals_agent_issued_idx').on(t.agentId, t.issuedAt),
+    // The bot's card sweep reads the last couple of hours of seals every 15 s.
+    index('seals_issued_idx').on(t.issuedAt),
     // At most ONE open seal per agent + callee, even when two requests race.
     uniqueIndex('seals_one_open_per_callee')
       .on(t.agentId, t.phoneHash)

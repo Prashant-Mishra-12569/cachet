@@ -1,0 +1,1 @@
+CREATE INDEX "seals_issued_idx" ON "seals" USING btree ("issued_at");
