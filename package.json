@@ -10,7 +10,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "node scripts/dev-ports.mjs check && turbo run dev",
+    "dev:stop": "node scripts/dev-ports.mjs stop",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "eslint .",
