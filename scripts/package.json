@@ -14,6 +14,7 @@
     "seal:smoke": "tsx seal-smoke.ts",
     "anchor:verify": "tsx anchor-verify.ts",
     "delivery:bench": "tsx delivery-bench.ts",
+    "pay:smoke": "tsx sponsored-transfer-smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
