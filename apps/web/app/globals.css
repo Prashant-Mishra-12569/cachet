@@ -25,3 +25,26 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Telegram Mini App (/tg): follow Telegram's own light/dark colours (it sets --tg-theme-* on <html>).
+   The seal green stays ours: it means "verified" everywhere. */
+.tg-app {
+  --color-bg: var(--tg-theme-secondary-bg-color, #faf8f5);
+  --color-surface: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --color-ink: var(--tg-theme-text-color, #0e0e0c);
+  --color-ink-2: var(--tg-theme-hint-color, #5c5a55);
+  --color-line: var(--tg-theme-section-separator-color, #e9e5de);
+}
+.tg-app[data-scheme='dark'] {
+  color-scheme: dark;
+  --color-seal: #3fbf8f;
+  --color-seal-soft: color-mix(in srgb, #3fbf8f 16%, transparent);
+  --color-alert: #ff7a6b;
+  --color-alert-soft: color-mix(in srgb, #ff7a6b 16%, transparent);
+}
+.tg-card {
+  border-radius: 18px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  padding: 1.25rem;
+}

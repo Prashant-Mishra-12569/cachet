@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ['@cachet/shared'],
+  // Local Mini App testing goes through an https tunnel to this dev server (Telegram needs https).
+  allowedDevOrigins: ['*.trycloudflare.com'],
   async rewrites() {
     return [
       { source: '/v1/:path*', destination: `${API_URL}/v1/:path*` },
