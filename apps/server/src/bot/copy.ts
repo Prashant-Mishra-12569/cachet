@@ -63,4 +63,89 @@ export const copy = {
   stopKept: "Nothing changed. You're still protected.",
   notRegistered: "I don't have any data about you.",
   privateOnly: 'I only work in a private chat.',
+
+  // /family
+  familyHelp:
+    'Protect someone you love.\nSend /family and their name, like: <code>/family Mom</code>\nThey say yes in their own Telegram.',
+  familyLabelBad: 'Please use a short name (1–30 letters), like: <code>/family Mom</code>',
+  familyLimit: 'You can protect up to 5 people.',
+  familyInvite: (label: string, link: string) =>
+    `Send this link to <b>${esc(label)}</b>:\n${esc(link)}\nWhen they open it and tap Allow, I'll alert you if they're ever on an unverified call. The link works once, for 24 hours.`,
+  familyAsk: (guardianName: string) =>
+    `<b>${esc(guardianName)}</b> wants an alert if you're ever on an unverified call.\nThey won't see your calls or your number. Allow?`,
+  familyAllow: 'Allow',
+  familyDecline: 'No thanks',
+  familyAllowed: (guardianName: string) =>
+    `Done. <b>${esc(guardianName)}</b> will get an alert if you're ever on an unverified call.\nRemove it any time with /family.`,
+  familyGuardianTold: (label: string) =>
+    `✅ <b>${esc(label)}</b> said yes. I'll alert you if they're ever on an unverified call.`,
+  familyDeclined: 'OK, nothing is shared.',
+  familyInviteGone: 'This invite link has expired or was already used. Ask for a new one.',
+  familySelf: "That's your own invite link. Send it to the person you want to protect.",
+  familyAlready: "You're already linked.",
+  familyNone: 'Nobody is linked yet.',
+  familyList: (protects: string[], protectedBy: string[]) =>
+    [
+      protects.length ? `You protect: ${protects.map((n) => `<b>${esc(n)}</b>`).join(', ')}` : '',
+      protectedBy.length ? `Protecting you: ${protectedBy.map((n) => `<b>${esc(n)}</b>`).join(', ')}` : '',
+      'Add someone: <code>/family Mom</code>',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  familyRemoveButton: (name: string) => `Remove ${name}`,
+  familyRemoved: 'Removed.',
+  familyGuardianLeft: (guardianName: string) =>
+    `<b>${esc(guardianName)}</b> no longer gets alerts about your calls.`,
+  familyWardLeft: (label: string) => `<b>${esc(label)}</b> stopped sharing call alerts with you.`,
+  guardianAlert: (label: string) =>
+    `⚠️ <b>${esc(label)}</b> just checked a call that is NOT verified.\nYou may want to call them now.`,
+
+  // /history
+  historyEmpty: 'No sealed calls yet.',
+  historyTitle: 'Your last sealed calls:',
+
+  // /company
+  companyAsk: 'Send /company and a name, like: <code>/company Northwind</code>',
+  companyNone: (q: string) =>
+    `I don't know a verified company called "${esc(q)}".\nTreat AI calls claiming to be them as not verified.`,
+  companyNeverCalls: (name: string) =>
+    `⚠️ <b>${esc(name)}</b> has told Cachet it never makes AI calls.\nAny AI call claiming to be them is a scam.`,
+  companyFound: (name: string, country: string, callers: { name: string; numbers: string[] }[]) =>
+    [
+      `✅ <b>${esc(name)}</b> (${esc(country)}) is a verified company.`,
+      callers.length
+        ? `Verified AI callers: ${callers.map((c) => `${esc(c.name)} (calls from ${c.numbers.map(esc).join(', ')})`).join('; ')}`
+        : 'It has no verified AI callers.',
+    ].join('\n'),
+
+  // /consent
+  consentEmpty: 'No company has sealed a call to you yet. When one does, you can allow or block it here.',
+  consentTitle: 'Who may call you with a verified AI caller:',
+  consentLine: (name: string, status: 'granted' | 'revoked' | null) =>
+    `• <b>${esc(name)}</b>: ${status === 'granted' ? 'allowed' : status === 'revoked' ? 'blocked' : 'not set'}`,
+  consentBlockButton: (name: string) => `Block ${name}`,
+  consentAllowButton: (name: string) => `Allow ${name}`,
+  consentBlocked: (name: string) =>
+    `Blocked. <b>${esc(name)}</b>'s AI callers can no longer get a seal to call you. Changed your mind? Tap Allow above.`,
+  consentAllowed: (name: string) =>
+    `Allowed. Seals from <b>${esc(name)}</b> will now say you agreed to their calls.`,
 } as const;
+
+const PURPOSE_WORDS: Record<string, string> = {
+  billing: 'Billing',
+  delivery: 'Delivery',
+  appointments: 'Appointment',
+  support: 'Support',
+  account_alerts: 'Account alert',
+};
+export const purposeWord = (p: string) => PURPOSE_WORDS[p] ?? p;
+
+/** "just now", "5 min ago", "3 h ago", "2 days ago": no timezone needed. */
+export function ago(fromMs: number, nowMs: number): string {
+  const s = Math.max(0, Math.round((nowMs - fromMs) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  const d = Math.floor(s / 86_400);
+  return `${d} day${d === 1 ? '' : 's'} ago`;
+}

@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Update, UserFromGetMe } from 'grammy/types';
 import { phoneHash, ulid } from '@cachet/shared/seal';
+import { createMemoryAgentRepo } from '../agents/repo';
+import { createMemoryBusinessRepo } from '../business/repo';
 import { createMemoryKv } from '../infra/kv';
 import { createMemorySealRepo } from '../seals/repo';
 import { SEAL_CHANNEL } from '../seals/service';
 import { createBot } from './bot';
+import { createMemoryConsentsRepo } from './consents-repo';
 import { createSealDelivery } from './delivery';
+import { createMemoryFamilyRepo } from './family-repo';
 import { createMemoryPeopleRepo } from './people-repo';
 import { createPhoneCipher } from './phone-crypto';
 import { createMemoryReportsRepo } from './reports-repo';
@@ -37,9 +41,25 @@ function setup(webOrigin = 'http://localhost:3000') {
   const seals = createMemorySealRepo();
   const kv = createMemoryKv(now);
   const cipher = createPhoneCipher(KEY);
+  const family = createMemoryFamilyRepo((id) => people.byId(id));
+  const consents = createMemoryConsentsRepo();
+  const businesses = createMemoryBusinessRepo();
+  const agents = createMemoryAgentRepo();
   const bot = createBot(
     '123:TEST',
-    { people, reports, seals, kv, phoneCipher: cipher, phonePepper: PEPPER, now },
+    {
+      people,
+      reports,
+      seals,
+      family,
+      consents,
+      businesses,
+      agents,
+      kv,
+      phoneCipher: cipher,
+      phonePepper: PEPPER,
+      now,
+    },
     { botInfo },
   );
   const calls: Call[] = [];
@@ -68,40 +88,48 @@ function setup(webOrigin = 'http://localhost:3000') {
   });
 
   let updateId = 1;
-  const base = (chatType = 'private') => ({
+  /** `as` = which Telegram user sends it (their private chat id equals their user id). */
+  const base = (chatType = 'private', as = USER, name = 'P') => ({
     message_id: updateId,
     date: 0,
     chat:
       chatType === 'private'
-        ? { id: CHAT, type: 'private', first_name: 'P' }
+        ? { id: as, type: 'private', first_name: name }
         : { id: -5, type: 'group', title: 'G' },
-    from: { id: USER, is_bot: false, first_name: 'P' },
+    from: { id: as, is_bot: false, first_name: name },
   });
   const send = (u: Record<string, unknown>) =>
     bot.handleUpdate({ update_id: updateId++, ...u } as unknown as Update);
-  const command = (text: string, chatType?: string) =>
+  const command = (text: string, chatType?: string, as = USER, name = 'P') =>
     send({
       message: {
-        ...base(chatType),
+        ...base(chatType, as, name),
         text,
-        entities: [{ type: 'bot_command', offset: 0, length: text.length }],
+        entities: [{ type: 'bot_command', offset: 0, length: text.split(' ')[0]?.length ?? text.length }],
       },
     });
-  const contact = (userId: number, phone = '919336124858') =>
-    send({ message: { ...base(), contact: { phone_number: phone, first_name: 'P', user_id: userId } } });
-  const tap = (data: string) =>
+  const contact = (userId: number, phone = '919336124858', as = USER) =>
+    send({
+      message: { ...base('private', as), contact: { phone_number: phone, first_name: 'P', user_id: userId } },
+    });
+  const tap = (data: string, as = USER) =>
     send({
       callback_query: {
         id: `cb${updateId}`,
-        from: { id: USER, is_bot: false, first_name: 'P' },
+        from: { id: as, is_bot: false, first_name: 'P' },
         chat_instance: 'ci',
         data,
-        message: { message_id: 50, date: 0, chat: { id: CHAT, type: 'private', first_name: 'P' }, text: 'x' },
+        message: { message_id: 50, date: 0, chat: { id: as, type: 'private', first_name: 'P' }, text: 'x' },
       },
     });
 
   /** Put an open seal for NUMBER into the memory repo (as the seal service would). */
-  async function openSeal(company = 'Northwind Energy BV', code = '4721', agentId = 'agent-1') {
+  async function openSeal(
+    company = 'Northwind Energy BV',
+    code = '4721',
+    agentId = 'agent-1',
+    businessId = 'biz',
+  ) {
     const id = ulid(clock.t);
     seals.credits.set(agentId, 1);
     const issuedAt = Math.floor(clock.t / 1000);
@@ -109,7 +137,7 @@ function setup(webOrigin = 'http://localhost:3000') {
       {
         id,
         agentId,
-        businessId: 'biz',
+        businessId,
         phoneHash: phoneHash(PEPPER, NUMBER),
         fromE164: '+31201234567',
         purpose: 'billing',
@@ -120,6 +148,7 @@ function setup(webOrigin = 'http://localhost:3000') {
         sealJson: JSON.stringify({
           id,
           company: { legalName: company },
+          purpose: 'billing',
           message: 'Your November bill is ready',
           code,
           issuedAt,
@@ -150,6 +179,15 @@ function setup(webOrigin = 'http://localhost:3000') {
     clock,
     openSeal,
     delivery,
+    family,
+    consents,
+    businesses,
+    agents,
+    /** Messages sent to one chat. */
+    to: (chatId: number) =>
+      sent()
+        .filter((c) => c.payload['chat_id'] === chatId)
+        .map((c) => String(c.payload['text'])),
   };
 }
 
@@ -406,5 +444,309 @@ describe('phone encryption', () => {
   it('never produces the same ciphertext twice', () => {
     const c = createPhoneCipher(KEY);
     expect(c.encrypt(NUMBER)).not.toBe(c.encrypt(NUMBER));
+  });
+});
+
+const MOM = 888;
+const MOM_NUMBER = '919000000001';
+
+/** Guardian (USER) creates an invite for "Mom"; returns the deep-link token. */
+async function invite(t: ReturnType<typeof setup>, label = 'Mom') {
+  await t.contact(USER);
+  await t.command(`/family ${label}`);
+  const text = t.lastText();
+  const token = /start=fam_([A-Za-z0-9_-]+)/.exec(text)?.[1];
+  if (!token) throw new Error(`no invite link in: ${text}`);
+  return token;
+}
+
+/** Mom opens the link (registering first), and taps Allow. */
+async function momAccepts(t: ReturnType<typeof setup>, token: string) {
+  await t.command(`/start fam_${token}`, 'private', MOM, 'Mom');
+  await t.contact(MOM, MOM_NUMBER, MOM);
+  const ask = t
+    .sent()
+    .filter((c) => c.payload['chat_id'] === MOM)
+    .at(-1);
+  const data = (
+    ask?.payload['reply_markup'] as { inline_keyboard: { callback_data: string }[][] } | undefined
+  )?.inline_keyboard[0]?.[0]?.callback_data;
+  if (!data) throw new Error('no Allow button');
+  await t.tap(data, MOM);
+  return data;
+}
+
+describe('/family: protect someone, with their consent', () => {
+  it('explains how, when nobody is linked yet', async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.command('/family');
+    expect(t.lastText()).toContain('/family Mom');
+  });
+
+  it('gives a one-time invite link; only a HASH of the token is stored', async () => {
+    const t = setup();
+    const token = await invite(t);
+    expect(t.lastText()).toContain(`https://t.me/CachetSealBot?start=fam_${token}`);
+    const row = [...t.family.rows.values()][0];
+    expect(row?.inviteTokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(row?.inviteTokenHash).not.toContain(token);
+  });
+
+  it.each(['<b>x</b>', 'a'.repeat(31), '   '])('refuses the label %j', async (label) => {
+    const t = setup();
+    await t.contact(USER);
+    await t.command(`/family ${label}`);
+    expect(t.lastText()).toMatch(/short name|\/family Mom/);
+    expect(t.family.rows.size).toBe(0);
+  });
+
+  it('a new person opening the link registers first, then is asked; Allow links them', async () => {
+    const t = setup();
+    const token = await invite(t);
+    await momAccepts(t, token);
+    expect(t.to(MOM).some((m) => m.includes('<b>P</b> wants an alert'))).toBe(true);
+    const edits = t.calls.filter((c) => c.method === 'editMessageText').map((c) => String(c.payload['text']));
+    expect(edits.at(-1)).toContain('will get an alert');
+    expect(t.to(USER).at(-1)).toContain('<b>Mom</b> said yes');
+  });
+
+  it('alerts the guardian when Mom checks a call that is NOT verified', async () => {
+    const t = setup();
+    await momAccepts(t, await invite(t));
+    await t.command('/check', 'private', MOM, 'Mom');
+    expect(t.to(MOM).at(-1)).toContain('Not verified');
+    expect(t.to(USER).at(-1)).toContain('<b>Mom</b> just checked a call that is NOT verified');
+  });
+
+  it('no alert when Mom has a verified call (green)', async () => {
+    const t = setup();
+    await momAccepts(t, await invite(t));
+    const before = t.to(USER).length;
+    // A seal for Mom's number:
+    const id = ulid(t.clock.t);
+    t.seals.credits.set('agent-1', 1);
+    await t.seals.issue(
+      {
+        id,
+        agentId: 'agent-1',
+        businessId: 'biz',
+        phoneHash: phoneHash(PEPPER, `+${MOM_NUMBER}`),
+        fromE164: '+31201234567',
+        purpose: 'billing',
+        message: 'Bill',
+        code: '4721',
+        issuedAt: new Date(t.clock.t),
+        expiresAt: new Date(t.clock.t + 900_000),
+        sealJson: JSON.stringify({
+          company: { legalName: 'Northwind Energy BV' },
+          code: '4721',
+          purpose: 'billing',
+        }),
+        sealHash: id,
+      },
+      { kind: 'seal', refId: id, itemHash: id },
+    );
+    await t.command('/check', 'private', MOM, 'Mom');
+    expect(t.to(MOM).at(-1)).toContain('has a verified call to you right now');
+    expect(t.to(USER).length).toBe(before);
+  });
+
+  it('limits alerts to 3 per 10 minutes (no alert storms)', async () => {
+    const t = setup();
+    await momAccepts(t, await invite(t));
+    for (let i = 0; i < 5; i++) await t.command('/check', 'private', MOM, 'Mom');
+    expect(t.to(USER).filter((m) => m.includes('NOT verified'))).toHaveLength(3);
+  });
+
+  it('an invite works only once', async () => {
+    const t = setup();
+    const token = await invite(t);
+    await momAccepts(t, token);
+    const STRANGER = 999;
+    await t.contact(STRANGER, '919000000002', STRANGER);
+    await t.command(`/start fam_${token}`, 'private', STRANGER);
+    expect(t.to(STRANGER).at(-1)).toContain('expired or was already used');
+  });
+
+  it('an invite expires after 24 hours', async () => {
+    const t = setup();
+    const token = await invite(t);
+    t.clock.t += 24 * 60 * 60 * 1000 + 1;
+    await t.contact(MOM, MOM_NUMBER, MOM);
+    await t.command(`/start fam_${token}`, 'private', MOM, 'Mom');
+    expect(t.to(MOM).at(-1)).toContain('expired or was already used');
+  });
+
+  it('opening your own invite does nothing', async () => {
+    const t = setup();
+    const token = await invite(t);
+    await t.command(`/start fam_${token}`);
+    expect(t.lastText()).toContain("That's your own invite link");
+  });
+
+  it('a forged "Allow" (never shown the invite) links nothing', async () => {
+    const t = setup();
+    await invite(t);
+    const inviteId = [...t.family.rows.keys()][0] ?? '';
+    await t.contact(MOM, MOM_NUMBER, MOM);
+    await t.tap(`fam:ok:${inviteId}`, MOM);
+    expect([...t.family.rows.values()][0]?.wardPersonId).toBeNull();
+    expect(t.to(MOM).at(-1)).toContain('expired or was already used');
+  });
+
+  it('either side can remove the link, and the other side is told', async () => {
+    const t = setup();
+    await momAccepts(t, await invite(t));
+    await t.command('/family', 'private', MOM, 'Mom');
+    const list = t
+      .sent()
+      .filter((c) => c.payload['chat_id'] === MOM)
+      .at(-1);
+    expect(String(list?.payload['text'])).toContain('Protecting you: <b>P</b>');
+    const rm = (list?.payload['reply_markup'] as { inline_keyboard: { callback_data: string }[][] })
+      .inline_keyboard[0]?.[0]?.callback_data;
+    await t.tap(rm ?? '', MOM);
+    expect(t.to(USER).at(-1)).toContain('<b>Mom</b> stopped sharing call alerts with you.');
+    expect(await t.family.linksOf([...t.people.rows.values()][0]?.id ?? '')).toHaveLength(0);
+  });
+
+  it('at most 5 people per guardian', async () => {
+    const t = setup();
+    await t.contact(USER);
+    for (let i = 0; i < 5; i++) await t.command(`/family Person${i}`);
+    await t.command('/family Sixth');
+    expect(t.lastText()).toContain('up to 5 people');
+  });
+});
+
+describe('/history', () => {
+  it('lists recent sealed calls in plain words', async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.openSeal('Northwind Energy BV');
+    await t.command('/history');
+    expect(t.lastText()).toContain('• <b>Northwind Energy BV</b> · Billing · just now · in progress');
+  });
+
+  it('says so when there are none', async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.command('/history');
+    expect(t.lastText()).toBe('No sealed calls yet.');
+  });
+});
+
+describe('/company', () => {
+  async function withCompany(neverCalls = false) {
+    const t = setup();
+    const biz = await t.businesses.upsertVerified({
+      concordiumAccount: '3tCvWPDYchFULvGXKc6Q3MzofopAgMzzL3KeRU66G2dM2LqcNa',
+      legalName: neverCalls ? 'Demo Exchange (demo)' : 'Northwind Energy BV',
+      legalCountry: 'NL',
+      issuer: 'did:ccd:testnet:idp:4',
+      proofTx: 'a'.repeat(64),
+      requestTx: 'b'.repeat(64),
+      verifiedAt: new Date(),
+    });
+    if (neverCalls) (biz as { neverCalls: boolean }).neverCalls = true;
+    const agent = await t.agents.create({
+      businessId: biz.id,
+      name: 'Billing assistant',
+      description: 'x',
+      purposes: ['billing'],
+      language: 'en',
+      callingNumbers: ['+31201234567'],
+      agentAccount: '33Rcud5xa7UZT3JQawDw9rhp5X14H8MPmfGR9E1uHQ59mr1jVq',
+    });
+    await t.agents.transition(agent.id, 'draft', { status: 'active' });
+    return { t, biz };
+  }
+
+  it('shows a verified company and the numbers its AI calls from', async () => {
+    const { t } = await withCompany();
+    await t.command('/company north');
+    expect(t.lastText()).toContain('✅ <b>Northwind Energy BV</b> (NL) is a verified company.');
+    expect(t.lastText()).toContain('Billing assistant (calls from +31201234567)');
+  });
+
+  it('says clearly when a company is unknown', async () => {
+    const { t } = await withCompany();
+    await t.command('/company Binance');
+    expect(t.lastText()).toContain('I don\'t know a verified company called "Binance"');
+  });
+
+  it('a company that never calls → scam warning', async () => {
+    const { t } = await withCompany(true);
+    await t.command('/company demo exchange');
+    expect(t.lastText()).toContain('has told Cachet it never makes AI calls');
+  });
+
+  it('asks for a name when none is given', async () => {
+    const { t } = await withCompany();
+    await t.command('/company');
+    expect(t.lastText()).toContain('/company Northwind');
+  });
+});
+
+describe('/consent: who may call me', () => {
+  it('lists companies that sealed calls to you; Block and Allow work', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const biz = await t.businesses.upsertVerified({
+      concordiumAccount: '3tCvWPDYchFULvGXKc6Q3MzofopAgMzzL3KeRU66G2dM2LqcNa',
+      legalName: 'Northwind Energy BV',
+      legalCountry: 'NL',
+      issuer: 'x',
+      proofTx: 'a'.repeat(64),
+      requestTx: 'b'.repeat(64),
+      verifiedAt: new Date(),
+    });
+    await t.openSeal('Northwind Energy BV', '4721', 'agent-1', biz.id);
+    await t.command('/consent');
+    expect(t.lastText()).toContain('• <b>Northwind Energy BV</b>: not set');
+    await t.tap(`cons:block:${biz.id}`);
+    expect(await t.consents.statusFor(phoneHash(PEPPER, NUMBER), biz.id)).toBe('revoked');
+    expect(t.lastText()).toContain('can no longer get a seal to call you');
+    // The list updates in place: now "blocked", and only the Allow (undo) button is left.
+    const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
+    expect(String(edit?.payload['text'])).toContain('• <b>Northwind Energy BV</b>: blocked');
+    expect(JSON.stringify(edit?.payload['reply_markup'])).toContain(`cons:allow:${biz.id}`);
+    expect(JSON.stringify(edit?.payload['reply_markup'])).not.toContain('cons:block:');
+    await t.tap(`cons:allow:${biz.id}`);
+    expect(await t.consents.statusFor(phoneHash(PEPPER, NUMBER), biz.id)).toBe('granted');
+  });
+
+  it('tapping an old button twice does not record the same choice twice', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const biz = await t.businesses.upsertVerified({
+      concordiumAccount: '3tCvWPDYchFULvGXKc6Q3MzofopAgMzzL3KeRU66G2dM2LqcNa',
+      legalName: 'Northwind Energy BV',
+      legalCountry: 'NL',
+      issuer: 'x',
+      proofTx: 'a'.repeat(64),
+      requestTx: 'b'.repeat(64),
+      verifiedAt: new Date(),
+    });
+    await t.openSeal('Northwind Energy BV', '4721', 'agent-1', biz.id);
+    const set = vi.spyOn(t.consents, 'set');
+    await t.tap(`cons:block:${biz.id}`);
+    await t.tap(`cons:block:${biz.id}`);
+    expect(set).toHaveBeenCalledTimes(1);
+  });
+
+  it("can't block or allow a company that never called you", async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.tap('cons:block:00000000-0000-0000-0000-000000000000');
+    expect(t.consents.rows.size).toBe(0);
+  });
+
+  it('says so when no company has called yet', async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.command('/consent');
+    expect(t.lastText()).toContain('No company has sealed a call to you yet');
   });
 });
