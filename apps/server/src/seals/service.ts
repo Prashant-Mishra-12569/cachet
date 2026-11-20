@@ -70,6 +70,7 @@ export type SealErrorCode =
   | 'invalid_phone'
   | 'payment_required'
   | 'seal_conflict'
+  | 'consent_revoked'
   | 'seal_not_found'
   | 'seal_not_open';
 
@@ -107,6 +108,8 @@ export interface SealServiceDeps {
   maxSkewSeconds?: number;
   /** How long a live on-chain agent read is reused. Revocation shows up within this time. */
   chainCacheMs?: number;
+  /** The callee's choice for this company (/consent in the bot), or null if none. */
+  consentFor?: (phoneHash: string, businessId: string) => Promise<'granted' | 'revoked' | null>;
   /** Public Agent Registry service URL, for "check this badge yourself" links. */
   registryUrl?: string;
   /** Where a ledger item sits in an on-chain anchor (from the anchoring worker). */
@@ -213,6 +216,10 @@ export function createSealService(deps: SealServiceDeps) {
       }
       const to = normalizeE164(request.to);
       if (!to) throw new SealError('invalid_phone');
+      const calleeHash = phoneHash(deps.phonePepper, to);
+      // "Who may call me" (/consent): a person who blocked this company gets no sealed calls from it.
+      const consent = deps.consentFor ? await deps.consentFor(calleeHash, business.id) : null;
+      if (consent === 'revoked') throw new SealError('consent_revoked');
 
       const issuedMs = nowMs();
       const id = ulid(issuedMs);
@@ -238,7 +245,7 @@ export function createSealService(deps: SealServiceDeps) {
             Object.entries(signature).map(([c, keys]) => [c, Object.fromEntries(Object.entries(keys))]),
           ) as Seal['agent']['sig'],
         },
-        callee: { phoneHash: phoneHash(deps.phonePepper, to) },
+        callee: { phoneHash: calleeHash },
         from,
         purpose: request.purpose,
         message,
@@ -246,7 +253,8 @@ export function createSealService(deps: SealServiceDeps) {
         code,
         issuedAt,
         expiresAt: issuedAt + ttl,
-        consent: 'none_recorded',
+        // Never imply consent we don't have (plan §29.3).
+        consent: consent === 'granted' ? 'granted' : 'none_recorded',
         payment: { method: 'x402-credit', ref: (await deps.seals.latestPurchaseTx(agent.id)) ?? 'none' },
       };
       const seal = signSeal(unsigned, deps.signingKey);

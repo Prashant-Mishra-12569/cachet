@@ -1,4 +1,4 @@
-import { eq, people, sql, type Db, type PersonRow } from '@cachet/db';
+import { consents, eq, people, sql, type Db, type PersonRow } from '@cachet/db';
 
 export type { PersonRow };
 
@@ -12,13 +12,17 @@ export interface NewPerson {
 
 export interface PeopleRepo {
   byTelegramId(tgUserId: number): Promise<PersonRow | null>;
+  byId(id: string): Promise<PersonRow | null>;
   byPhoneHash(phoneHash: string): Promise<PersonRow | null>;
   /**
    * Save a person. One row per Telegram user AND one per number: if this number was registered by
    * another Telegram account (numbers get recycled), that old registration is removed.
    */
   register(input: NewPerson): Promise<PersonRow>;
-  /** /stop: delete everything we hold about this Telegram user. True if something was deleted. */
+  /**
+   * /stop: delete everything we hold about this Telegram user: the person (their reports and family
+   * links go with it, by cascade) and their consent choices. True if something was deleted.
+   */
   deleteByTelegramId(tgUserId: number): Promise<boolean>;
 }
 
@@ -26,6 +30,10 @@ export function createPeopleRepo(db: Db): PeopleRepo {
   return {
     async byTelegramId(tgUserId) {
       const rows = await db.select().from(people).where(eq(people.tgUserId, tgUserId)).limit(1);
+      return rows[0] ?? null;
+    },
+    async byId(id) {
+      const rows = await db.select().from(people).where(eq(people.id, id)).limit(1);
       return rows[0] ?? null;
     },
     async byPhoneHash(phoneHash) {
@@ -58,8 +66,16 @@ export function createPeopleRepo(db: Db): PeopleRepo {
       });
     },
     async deleteByTelegramId(tgUserId) {
-      const rows = await db.delete(people).where(eq(people.tgUserId, tgUserId)).returning({ id: people.id });
-      return rows.length > 0;
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .delete(people)
+          .where(eq(people.tgUserId, tgUserId))
+          .returning({ phoneHash: people.phoneHash });
+        const deleted = rows[0];
+        if (!deleted) return false;
+        await tx.delete(consents).where(eq(consents.phoneHash, deleted.phoneHash));
+        return true;
+      });
     },
   };
 }
@@ -71,6 +87,7 @@ export function createMemoryPeopleRepo(): PeopleRepo & { rows: Map<number, Perso
     rows,
     byTelegramId: async (id) => rows.get(id) ?? null,
     byPhoneHash: async (h) => [...rows.values()].find((p) => p.phoneHash === h) ?? null,
+    byId: async (id) => [...rows.values()].find((p) => p.id === id) ?? null,
     async register(input) {
       for (const [id, p] of rows)
         if (p.phoneHash === input.phoneHash && id !== input.tgUserId) rows.delete(id);

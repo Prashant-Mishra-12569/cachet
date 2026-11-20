@@ -5,6 +5,7 @@ import { createMemoryAgentRepo } from '../agents/repo';
 import { createAgentService } from '../agents/service';
 import { loadSealSigningKey } from '@cachet/shared/seal';
 import { createAuthService, type VerifyMessage } from '../auth/service';
+import { createMemoryConsentsRepo } from '../bot/consents-repo';
 import { createMemorySealRepo } from '../seals/repo';
 import { createSealService } from '../seals/service';
 import { createCompanyProofService } from '../business/company-proof';
@@ -133,6 +134,7 @@ export function makeTestApp(
     sleep: async () => undefined,
   });
   const sealRepo = createMemorySealRepo();
+  const consentsRepo = createMemoryConsentsRepo();
   const signingKey = loadSealSigningKey('22'.repeat(32));
   const checkedMessages: { address: string; message: string }[] = [];
   const seals = createSealService({
@@ -154,6 +156,7 @@ export function makeTestApp(
     pltTokenId: 'EUDemo',
     webOrigin: WEB_ORIGIN,
     registryUrl: 'https://registry.test',
+    consentFor: (phoneHash, businessId) => consentsRepo.statusFor(phoneHash, businessId),
     now,
   });
   const app = createApp({
@@ -171,7 +174,19 @@ export function makeTestApp(
     secureCookies: false,
     trustProxy: false,
   });
-  return { app, kv, clock, repo, chain, cardHost, agentRepo, sealRepo, signingKey, checkedMessages };
+  return {
+    app,
+    kv,
+    clock,
+    repo,
+    chain,
+    cardHost,
+    agentRepo,
+    sealRepo,
+    signingKey,
+    checkedMessages,
+    consentsRepo,
+  };
 }
 
 export function postJson(path: string, body: unknown, headers: Record<string, string> = {}) {

@@ -37,6 +37,10 @@ export interface SealRepo {
     reason: string,
     ledger: LedgerItemInput,
   ): Promise<SealRow | null>;
+  /** A callee's most recent seals, any status (for /history). */
+  historyForPhone(phoneHash: string, limit: number): Promise<SealRow[]>;
+  /** Companies that sealed calls to this callee since `since` (for /consent). */
+  businessesForPhone(phoneHash: string, since: Date): Promise<string[]>;
   /** Open seals for a callee right now (for /check, Phase 3). */
   openForPhone(phoneHash: string, now: Date): Promise<SealRow[]>;
   creditBalance(agentId: string): Promise<number>;
@@ -107,6 +111,23 @@ export function createSealRepo(db: Db): SealRepo {
         await tx.insert(ledgerItems).values(ledger);
         return row;
       });
+    },
+
+    async historyForPhone(phoneHash, limit) {
+      return db
+        .select()
+        .from(seals)
+        .where(eq(seals.phoneHash, phoneHash))
+        .orderBy(desc(seals.issuedAt))
+        .limit(limit);
+    },
+
+    async businessesForPhone(phoneHash, since) {
+      const rows = await db
+        .selectDistinct({ businessId: seals.businessId })
+        .from(seals)
+        .where(and(eq(seals.phoneHash, phoneHash), sql`${seals.issuedAt} >= ${since}`));
+      return rows.map((r) => r.businessId);
     },
 
     async openForPhone(phoneHash, now) {
@@ -201,6 +222,18 @@ export function createMemorySealRepo() {
       ledger.push({ ...item, anchorId: null, leafIndex: null });
       return next;
     },
+    historyForPhone: async (phoneHash, limit) =>
+      [...sealRows.values()]
+        .filter((s) => s.phoneHash === phoneHash)
+        .sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime())
+        .slice(0, limit),
+    businessesForPhone: async (phoneHash, since) => [
+      ...new Set(
+        [...sealRows.values()]
+          .filter((s) => s.phoneHash === phoneHash && s.issuedAt >= since)
+          .map((s) => s.businessId),
+      ),
+    ],
     openForPhone: async (phoneHash, now) =>
       [...sealRows.values()]
         .filter((s) => s.phoneHash === phoneHash && s.status === 'open' && s.expiresAt > now)

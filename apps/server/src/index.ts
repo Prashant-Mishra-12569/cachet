@@ -19,7 +19,9 @@ import { createAgentService } from './agents/service';
 import { createApp } from './api/app';
 import { createAuthService } from './auth/service';
 import { createBot, startBotPolling } from './bot/bot';
+import { createConsentsRepo } from './bot/consents-repo';
 import { createSealDelivery } from './bot/delivery';
+import { createFamilyRepo } from './bot/family-repo';
 import { createPeopleRepo } from './bot/people-repo';
 import { createPhoneCipher } from './bot/phone-crypto';
 import { createReportsRepo } from './bot/reports-repo';
@@ -96,6 +98,7 @@ const anchorRepo = createAnchorRepo(database.db);
 const signingKey = loadSealSigningKey(env.SEAL_SIGNING_KEY);
 const agentKeys = createCachedMessageVerifier(grpc);
 const sealRepo = createSealRepo(database.db);
+const consentsRepo = createConsentsRepo(database.db);
 const seals = createSealService({
   seals: sealRepo,
   agents: agentRepo,
@@ -103,6 +106,7 @@ const seals = createSealService({
   gateway,
   verifyMessage: agentKeys,
   inclusion: (kind, refId) => anchorRepo.inclusion(kind, refId),
+  consentFor: (phoneHash, businessId) => consentsRepo.statusFor(phoneHash, businessId),
   registryUrl: registry.baseUrl,
   prefetchAccount: agentKeys.prefetch,
   kv,
@@ -168,6 +172,10 @@ const bot = env.TELEGRAM_BOT_TOKEN
       people,
       reports: createReportsRepo(database.db),
       seals: sealRepo,
+      family: createFamilyRepo(database.db),
+      consents: consentsRepo,
+      businesses: repo,
+      agents: agentRepo,
       kv,
       phoneCipher: createPhoneCipher(env.PHONE_ENC_KEY),
       phonePepper: env.PHONE_PEPPER,

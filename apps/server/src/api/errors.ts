@@ -107,6 +107,10 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     status: 409,
     message: 'Another seal for this person was issued at the same moment. Please try again.',
   },
+  consent_revoked: {
+    status: 403,
+    message: 'This person has blocked verified AI calls from your company.',
+  },
   seal_not_found: { status: 404, message: "This seal doesn't exist." },
   seal_not_open: { status: 409, message: 'This seal is no longer open.' },
   verifier_unavailable: {

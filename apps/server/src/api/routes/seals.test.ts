@@ -4,6 +4,7 @@ import {
   canonicalize,
   publicKeyFromJwk,
   sealCloseMessage,
+  phoneHash,
   sealRequestMessage,
   sha256Hex,
   verifySealSignature,
@@ -159,6 +160,36 @@ describe('POST /v1/seals: a sealed call', () => {
     expect(ctx.sealRepo.sealRows.get(String(second['sealId']))?.status).toBe('open');
     const other = await ctx.seal(ctx.request({ to: '+919999999999' }));
     expect(other.status).toBe(201);
+  });
+});
+
+describe('consent ("who may call me" in the bot)', () => {
+  const PEPPER = 'test-phone-pepper-0123456789abcdef';
+
+  it('a person who BLOCKED the company gets no seal, and no credit is spent', async () => {
+    const ctx = await setup();
+    const biz = await ctx.repo.findByAccount(ACCOUNT);
+    await ctx.consentsRepo.set(phoneHash(PEPPER, CALLEE), biz?.id ?? '', 'revoked', new Date());
+    const res = await ctx.seal();
+    expect(res.status).toBe(403);
+    expect(await errorCode(res)).toBe('consent_revoked');
+    expect(await ctx.sealRepo.creditBalance(ctx.agentId)).toBe(10);
+  });
+
+  it('a person who ALLOWED the company gets seals that say consent: granted', async () => {
+    const ctx = await setup();
+    const biz = await ctx.repo.findByAccount(ACCOUNT);
+    await ctx.consentsRepo.set(phoneHash(PEPPER, CALLEE), biz?.id ?? '', 'granted', new Date());
+    const body = (await (await ctx.seal()).json()) as Json;
+    const stored = JSON.parse(ctx.sealRepo.sealRows.get(String(body['sealId']))?.sealJson ?? '{}') as Seal;
+    expect(stored.consent).toBe('granted');
+  });
+
+  it('no choice yet → consent: none_recorded (we never imply consent)', async () => {
+    const ctx = await setup();
+    const body = (await (await ctx.seal()).json()) as Json;
+    const stored = JSON.parse(ctx.sealRepo.sealRows.get(String(body['sealId']))?.sealJson ?? '{}') as Seal;
+    expect(stored.consent).toBe('none_recorded');
   });
 });
 
