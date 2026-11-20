@@ -67,8 +67,17 @@ async function main(): Promise<void> {
   const started = Date.now();
   const issued = await post('/v1/seals', sealBody);
   const ms = Date.now() - started;
-  if (issued.res.status !== 201)
-    fail(`seal refused: HTTP ${issued.res.status} ${JSON.stringify(issued.json)}`);
+  if (issued.res.status !== 201) {
+    const code = (issued.json['error'] as { code?: string } | undefined)?.code;
+    const hint =
+      code === 'consent_revoked'
+        ? '\n  This number blocked the company in Telegram (that is the block working).' +
+          '\n  To undo: send /consent to the bot and tap "Allow".'
+        : code === 'payment_required'
+          ? '\n  The agent has no seal credits left.'
+          : '';
+    fail(`seal refused: HTTP ${issued.res.status} ${JSON.stringify(issued.json)}${hint}`);
+  }
   console.log(`✓ seal issued in ${ms} ms`);
   console.log(`    code:       ${String(issued.json['code'])}`);
   console.log(`    first line: ${String(issued.json['firstLine'])}`);
