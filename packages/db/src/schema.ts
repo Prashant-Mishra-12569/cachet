@@ -246,6 +246,57 @@ export const people = pgTable('people', {
 
 export type PersonRow = typeof people.$inferSelect;
 
+/**
+ * A guardian gets an alert when their ward is on an unverified call.
+ * The WARD must agree in their own Telegram (one-time invite link), so nobody can watch a number
+ * without that person's consent. Deleting either person deletes the link.
+ */
+export const guardians = pgTable(
+  'guardians',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    guardianPersonId: uuid('guardian_person_id')
+      .notNull()
+      .references(() => people.id, { onDelete: 'cascade' }),
+    /** Telegram first name of the guardian at invite time (shown to the ward when asked to allow). */
+    guardianName: text('guardian_name').notNull(),
+    /** What the guardian calls the ward, e.g. "Mom". */
+    wardLabel: text('ward_label').notNull(),
+    /** Null until the ward accepts. */
+    wardPersonId: uuid('ward_person_id').references(() => people.id, { onDelete: 'cascade' }),
+    /** sha256 of the invite token (the token itself is only in the link). Null once used. */
+    inviteTokenHash: text('invite_token_hash').unique(),
+    inviteExpiresAt: timestamp('invite_expires_at', { withTimezone: true }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('guardians_pair_idx').on(t.guardianPersonId, t.wardPersonId),
+    index('guardians_ward_idx').on(t.wardPersonId),
+    check('guardian_label_length', sql`char_length(${t.wardLabel}) between 1 and 30`),
+  ],
+);
+
+/** "Who may call me": a person allows or blocks sealed AI calls from a company (plan §9 consents). */
+export const consentStatus = pgEnum('consent_status', ['granted', 'revoked']);
+export const consents = pgTable(
+  'consents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    phoneHash: text('phone_hash').notNull(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    status: consentStatus('status').notNull(),
+    source: text('source').notNull().default('bot'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('consents_phone_business_idx').on(t.phoneHash, t.businessId)],
+);
+export type ConsentRow = typeof consents.$inferSelect;
+export type GuardianRow = typeof guardians.$inferSelect;
+
 /** "Report this call": a person flags a call. Deleted with the person on /stop (the anchored hash stays). */
 export const reports = pgTable(
   'reports',
