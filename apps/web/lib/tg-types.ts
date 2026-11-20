@@ -53,6 +53,24 @@ export interface TgSeal {
     fee: 'free';
     ready: boolean;
   } | null;
+  paid: { txHash: string; txUrl: string; paidAt: string } | null;
+}
+
+export interface TgPrepared {
+  /** Sponsored transaction JSON for the wallet (Transaction.signableFromJSON). */
+  transaction: string;
+  expiresAt: string;
+  amount: Amount;
+  company: string;
+  recipient: string;
+  sender: string;
+}
+
+export interface TgPaid {
+  status: 'paid';
+  txHash: string;
+  txUrl: string;
+  paidAt: string;
 }
 
 export const PURPOSES: Record<string, string> = {

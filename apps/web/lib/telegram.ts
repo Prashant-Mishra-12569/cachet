@@ -11,7 +11,8 @@ export interface TelegramWebApp {
   platform: string;
   ready(): void;
   expand(): void;
-  openLink(url: string): void;
+  /** Opens an http(s) link outside Telegram; `try_browser` asks for a specific browser (Bot API 7.6+). */
+  openLink(url: string, options?: { try_instant_view?: boolean; try_browser?: string }): void;
   onEvent(event: 'themeChanged', cb: () => void): void;
   offEvent(event: 'themeChanged', cb: () => void): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };

@@ -12,7 +12,9 @@
   "dependencies": {
     "@cachet/shared": "workspace:*",
     "@concordium/browser-wallet-api-helpers": "3.3.0",
+    "@concordium/wallet-connectors": "0.9.0",
     "@concordium/web-sdk": "12.0.2",
+    "@walletconnect/modal": "2.7.0",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",

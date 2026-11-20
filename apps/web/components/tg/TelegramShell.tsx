@@ -103,6 +103,11 @@ export function Skeleton() {
   );
 }
 
+/** Telegram + its signed launch data (for POSTs to the Mini App API). Null outside the shell. */
+export function useTelegram() {
+  return useContext(TelegramContext);
+}
+
 /** GET from the Mini App API, signed with Telegram's launch data. */
 export function useTgData<T>(path: string) {
   const ctx = useContext(TelegramContext);
