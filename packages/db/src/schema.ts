@@ -229,6 +229,32 @@ export const creditPurchases = pgTable('credit_purchases', {
 });
 
 /**
+ * Safe payments (plan §13.2): a person paid the amount a seal asked for, to the AI caller's on-chain
+ * agentWallet, with the memo "cachet:<sealId>". Only written after the transaction is finalized on chain
+ * and checked. One payment per seal; a transaction can never be counted twice.
+ */
+export const payments = pgTable('payments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sealId: text('seal_id')
+    .notNull()
+    .unique()
+    .references(() => seals.id),
+  businessId: uuid('business_id')
+    .notNull()
+    .references(() => businesses.id),
+  txHash: text('tx_hash').notNull().unique(),
+  payer: text('payer').notNull(),
+  recipient: text('recipient').notNull(),
+  /** Decimal string, e.g. "12.40". */
+  amount: text('amount').notNull(),
+  asset: text('asset').notNull(),
+  /** True when Cachet's sponsor paid the transaction fee. */
+  sponsored: boolean('sponsored').notNull(),
+  paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type PaymentRow = typeof payments.$inferSelect;
+
+/**
  * People protected by Cachet (Telegram users who shared their own number).
  * The number is stored ONLY encrypted (AES-256-GCM) plus a keyed fingerprint for lookups.
  */
