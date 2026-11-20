@@ -40,6 +40,8 @@ export const copy = {
     `Call ended.\n<b>${esc(company)}</b>'s verified call is over. (Code was ${formatCode(code)}.)`,
   sealEndedBlocked: (company: string, code: string) =>
     `Ended. You blocked <b>${esc(company)}</b>, so this call is no longer verified. (Code was ${formatCode(code)}.)`,
+  sealExpired: (company: string, code: string) =>
+    `Ended. This seal from <b>${esc(company)}</b> has expired. (Code was ${formatCode(code)}.)`,
   sealReplaced: (company: string) => `Replaced by a newer call from <b>${esc(company)}</b>.`,
 
   checkGreen: (s: { company: string; code: string }) =>

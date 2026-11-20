@@ -16,6 +16,7 @@ const EXAMPLES: { [K in keyof Copy]?: Copy[K] extends (...args: infer A) => stri
   payButton: [AMOUNT],
   sealEnded: [COMPANY, '4721'],
   sealEndedBlocked: [COMPANY, '4721'],
+  sealExpired: [COMPANY, '4721'],
   sealReplaced: [COMPANY],
   checkGreen: [{ company: COMPANY, code: '4721' }],
   familyInvite: ['Mom', 'https://t.me/CachetSealBot?start=fam_…'],

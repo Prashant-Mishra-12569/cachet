@@ -184,6 +184,14 @@ function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
     return id;
   }
 
+  /** End a seal the way the seal service does (in the database). */
+  const closeSeal = (id: string, reason = 'completed', agentId = 'agent-1') =>
+    seals.close(id, agentId, new Date(clock.t), reason, {
+      kind: 'seal_closed',
+      refId: id,
+      itemHash: `c-${id}`,
+    });
+
   const sent = () => calls.filter((c) => c.method === 'sendMessage');
   const lastText = () => String(sent().at(-1)?.payload['text'] ?? '');
   return {
@@ -201,6 +209,7 @@ function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
     cipher,
     clock,
     openSeal,
+    closeSeal,
     delivery,
     family,
     consents,
@@ -388,9 +397,83 @@ describe('live seal cards', () => {
     const id = await t.openSeal();
     const ev = { sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) };
     await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    await t.closeSeal(id);
     await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
     const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
     expect(String(edit?.payload['text'])).toContain('Call ended.');
+    // A repeated event (or the sweep) never edits it again.
+    await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
+    await t.delivery.sweep();
+    expect(t.calls.filter((c) => c.method === 'editMessageText')).toHaveLength(1);
+  });
+
+  it('a call that ends while its card is still on the way gets the card ended right after (race)', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const id = await t.openSeal();
+    const ev = { sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) };
+    // The "ended" event arrives first (no card yet), then the card is delivered.
+    await t.closeSeal(id);
+    await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
+    await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    // Closed before delivery: no green card is sent at all.
+    expect(t.sent()).toHaveLength(1); // only the "You're protected" reply
+  });
+
+  it('a call that ends during sending: the card is ended as soon as it exists', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const id = await t.openSeal();
+    const ev = { sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) };
+    // Close the seal at the moment Telegram accepts the card (before the bot stores it).
+    t.bot.api.config.use(async (prev, method, payload, signal) => {
+      const res = await prev(method, payload, signal);
+      if (method === 'sendMessage' && String((payload as { text?: string }).text).includes('Verified call')) {
+        await t.closeSeal(id);
+        await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev })); // finds no card yet
+      }
+      return res;
+    });
+    await t.delivery.handle(JSON.stringify({ type: 'seal.issued', ...ev }));
+    const edits = t.calls.filter((c) => c.method === 'editMessageText');
+    expect(edits).toHaveLength(1);
+    expect(String(edits[0]?.payload['text'])).toContain('Call ended.');
+  });
+
+  it('the sweep ends cards whose seal expired (no "call ended" ever came)', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const id = await t.openSeal();
+    await t.delivery.handle(
+      JSON.stringify({ type: 'seal.issued', sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) }),
+    );
+    expect(await t.delivery.sweep()).toEqual({ delivered: 0, ended: 0 }); // still valid
+    t.clock.t += 15 * 60 * 1000 + 1000;
+    expect(await t.delivery.sweep()).toEqual({ delivered: 0, ended: 1 });
+    const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
+    expect(String(edit?.payload['text'])).toContain('has expired. (Code was 47-21.)');
+  });
+
+  it('the sweep delivers a card whose live event was lost (server restart), exactly once', async () => {
+    const t = setup();
+    await t.contact(USER);
+    await t.openSeal(); // no event delivered
+    expect(await t.delivery.sweep()).toEqual({ delivered: 1, ended: 0 });
+    expect(await t.delivery.sweep()).toEqual({ delivered: 0, ended: 0 });
+    expect(t.sent().filter((c) => String(c.payload['text']).includes('Verified call'))).toHaveLength(1);
+  });
+
+  it('the live event and the sweep at the same moment still send only one card', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const id = await t.openSeal();
+    await Promise.all([
+      t.delivery.handle(
+        JSON.stringify({ type: 'seal.issued', sealId: id, phoneHash: phoneHash(PEPPER, NUMBER) }),
+      ),
+      t.delivery.sweep(),
+    ]);
+    expect(t.sent().filter((c) => String(c.payload['text']).includes('Verified call'))).toHaveLength(1);
   });
 
   it('a newer seal from the same caller replaces the old card (never two codes)', async () => {
@@ -477,10 +560,12 @@ describe('live seal cards', () => {
         ],
       ],
     });
+    await t.closeSeal(id);
     await t.delivery.handle(JSON.stringify({ type: 'seal.closed', ...ev }));
     const edit = t.calls.filter((c) => c.method === 'editMessageText').at(-1);
+    expect(edit).toBeDefined();
     // Editing without reply_markup removes the buttons: no Pay button on an ended call.
-    expect(edit?.payload['reply_markup']).toBeUndefined();
+    expect(edit?.payload).not.toHaveProperty('reply_markup');
   });
 
   it('is wired to the seal channel (pub/sub)', async () => {

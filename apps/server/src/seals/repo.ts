@@ -41,6 +41,8 @@ export interface SealRepo {
   historyForPhone(phoneHash: string, limit: number): Promise<SealRow[]>;
   /** Companies that sealed calls to this callee since `since` (for /consent). */
   businessesForPhone(phoneHash: string, since: Date): Promise<string[]>;
+  /** Every seal issued since `since`, any status (for the bot's card sweep). */
+  issuedSince(since: Date): Promise<SealRow[]>;
   /** Open seals for a callee right now (for /check, Phase 3). */
   openForPhone(phoneHash: string, now: Date): Promise<SealRow[]>;
   creditBalance(agentId: string): Promise<number>;
@@ -131,6 +133,15 @@ export function createSealRepo(db: Db): SealRepo {
         .from(seals)
         .where(and(eq(seals.phoneHash, phoneHash), sql`${seals.issuedAt} >= ${since}`));
       return rows.map((r) => r.businessId);
+    },
+
+    async issuedSince(since) {
+      return db
+        .select()
+        .from(seals)
+        .where(sql`${seals.issuedAt} >= ${since}`)
+        .orderBy(seals.issuedAt, seals.id)
+        .limit(5000);
     },
 
     async openForPhone(phoneHash, now) {
@@ -241,6 +252,8 @@ export function createMemorySealRepo() {
           .map((s) => s.businessId),
       ),
     ],
+    issuedSince: async (since) =>
+      [...sealRows.values()].filter((s) => s.issuedAt >= since).sort((a, b) => newestFirst(b, a)),
     openForPhone: async (phoneHash, now) =>
       [...sealRows.values()]
         .filter((s) => s.phoneHash === phoneHash && s.status === 'open' && s.expiresAt > now)
