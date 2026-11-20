@@ -114,12 +114,15 @@ export function createSealRepo(db: Db): SealRepo {
     },
 
     async historyForPhone(phoneHash, limit) {
-      return db
-        .select()
-        .from(seals)
-        .where(eq(seals.phoneHash, phoneHash))
-        .orderBy(desc(seals.issuedAt))
-        .limit(limit);
+      return (
+        db
+          .select()
+          .from(seals)
+          .where(eq(seals.phoneHash, phoneHash))
+          // issuedAt has whole seconds; the ULID id breaks ties to the millisecond.
+          .orderBy(desc(seals.issuedAt), desc(seals.id))
+          .limit(limit)
+      );
     },
 
     async businessesForPhone(phoneHash, since) {
@@ -137,7 +140,7 @@ export function createSealRepo(db: Db): SealRepo {
         .where(
           and(eq(seals.phoneHash, phoneHash), eq(seals.status, 'open'), sql`${seals.expiresAt} > ${now}`),
         )
-        .orderBy(desc(seals.issuedAt));
+        .orderBy(desc(seals.issuedAt), desc(seals.id));
     },
 
     async creditBalance(agentId) {
@@ -175,6 +178,10 @@ export function createSealRepo(db: Db): SealRepo {
     },
   };
 }
+
+/** Same order as the SQL: issuedAt desc, then id desc (ULIDs sort by creation time). */
+const newestFirst = (a: SealRow, b: SealRow) =>
+  b.issuedAt.getTime() - a.issuedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
 /** In-memory version for tests (same rules, no database). */
 export function createMemorySealRepo() {
@@ -225,7 +232,7 @@ export function createMemorySealRepo() {
     historyForPhone: async (phoneHash, limit) =>
       [...sealRows.values()]
         .filter((s) => s.phoneHash === phoneHash)
-        .sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime())
+        .sort(newestFirst)
         .slice(0, limit),
     businessesForPhone: async (phoneHash, since) => [
       ...new Set(
@@ -237,7 +244,7 @@ export function createMemorySealRepo() {
     openForPhone: async (phoneHash, now) =>
       [...sealRows.values()]
         .filter((s) => s.phoneHash === phoneHash && s.status === 'open' && s.expiresAt > now)
-        .sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime()),
+        .sort(newestFirst),
     creditBalance: async (agentId) => credits.get(agentId) ?? 0,
     async addCredits(input) {
       if (purchases.some((p) => p.txHash === input.txHash)) return false;
