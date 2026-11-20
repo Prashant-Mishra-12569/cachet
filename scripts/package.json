@@ -13,12 +13,14 @@
     "gen-secrets": "tsx gen-secrets.ts",
     "seal:smoke": "tsx seal-smoke.ts",
     "anchor:verify": "tsx anchor-verify.ts",
+    "delivery:bench": "tsx delivery-bench.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@cachet/concordium": "workspace:*",
     "@cachet/shared": "workspace:*",
     "@concordium/web-sdk": "12.0.2",
+    "redis": "6.3.1",
     "zod": "4.6.7"
   }
 }

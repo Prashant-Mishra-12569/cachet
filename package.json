@@ -28,7 +28,9 @@
     "proof:smoke": "pnpm --filter @cachet/scripts proof:smoke",
     "gen-secrets": "pnpm --filter @cachet/scripts gen-secrets",
     "seal:smoke": "pnpm --filter @cachet/scripts seal:smoke",
-    "anchor:verify": "pnpm --filter @cachet/scripts anchor:verify"
+    "anchor:verify": "pnpm --filter @cachet/scripts anchor:verify",
+    "delivery:bench": "pnpm --filter @cachet/scripts delivery:bench",
+    "bot:copy": "pnpm --filter @cachet/server copy:preview"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
