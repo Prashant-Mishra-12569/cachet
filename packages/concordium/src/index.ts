@@ -7,3 +7,4 @@ export * from './signatures';
 export * from './registry-events';
 export * from './registry-chain';
 export * from './tx-sender';
+export * from './payments';
