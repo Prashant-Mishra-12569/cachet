@@ -19,6 +19,10 @@ import { createAgentService } from './agents/service';
 import { createApp } from './api/app';
 import { createAuthService } from './auth/service';
 import { createBot, startBotPolling } from './bot/bot';
+import { createSealDelivery } from './bot/delivery';
+import { createPeopleRepo } from './bot/people-repo';
+import { createPhoneCipher } from './bot/phone-crypto';
+import { createReportsRepo } from './bot/reports-repo';
 import { createCompanyProofService } from './business/company-proof';
 import { createBusinessRepo } from './business/repo';
 import { loadEnv } from './env';
@@ -91,8 +95,9 @@ const agents = createAgentService({
 const anchorRepo = createAnchorRepo(database.db);
 const signingKey = loadSealSigningKey(env.SEAL_SIGNING_KEY);
 const agentKeys = createCachedMessageVerifier(grpc);
+const sealRepo = createSealRepo(database.db);
 const seals = createSealService({
-  seals: createSealRepo(database.db),
+  seals: sealRepo,
   agents: agentRepo,
   businesses: repo,
   gateway,
@@ -157,11 +162,23 @@ if (!(await verifier.health())) {
   );
 }
 
-const bot = env.TELEGRAM_BOT_TOKEN ? createBot(env.TELEGRAM_BOT_TOKEN) : undefined;
+const people = createPeopleRepo(database.db);
+const bot = env.TELEGRAM_BOT_TOKEN
+  ? createBot(env.TELEGRAM_BOT_TOKEN, {
+      people,
+      reports: createReportsRepo(database.db),
+      seals: sealRepo,
+      kv,
+      phoneCipher: createPhoneCipher(env.PHONE_ENC_KEY),
+      phonePepper: env.PHONE_PEPPER,
+    })
+  : undefined;
 if (bot) {
   startBotPolling(bot).catch((err: unknown) => {
     console.error('[bot] could not start. Check TELEGRAM_BOT_TOKEN in .env.', err);
   });
+  // Seal cards: the bot hears every new / closed seal instantly (Redis pub/sub).
+  await createSealDelivery({ bot, kv, people, seals: sealRepo, webOrigin: env.WEB_ORIGIN }).start();
 } else {
   console.log('[bot] skipped: TELEGRAM_BOT_TOKEN is not set in .env');
 }

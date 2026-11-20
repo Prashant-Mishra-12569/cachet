@@ -64,6 +64,8 @@ const EnvSchema = z.object({
   SEAL_SIGNING_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
   CALL_CODE_SECRET: z.string().min(32, 'missing. Run "pnpm gen-secrets".'),
   PHONE_PEPPER: z.string().min(32, 'missing. Run "pnpm gen-secrets". Never change it once set.'),
+  /** AES-256 key for phone numbers people share with the bot (64 hex). */
+  PHONE_ENC_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
   /** Anchor the ledger when the oldest item is this old (plan: 5 minutes). */
   ANCHOR_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(300),
   CCD_SPONSOR_KEY_PATH: optionalString,

@@ -14,6 +14,8 @@ export interface KvStore {
   claim(key: string, ttlSeconds: number): Promise<boolean>;
   /** Fire-and-forget message to subscribers (e.g. the bot, the lamp). */
   publish(channel: string, message: string): Promise<void>;
+  /** Receive messages on a channel. Returns a function that unsubscribes. */
+  subscribe(channel: string, onMessage: (message: string) => void): Promise<() => Promise<void>>;
   /** Increment a counter; the TTL is set when the counter is created. */
   incr(key: string, ttlSeconds: number): Promise<number>;
   ping(): Promise<boolean>;
@@ -46,6 +48,19 @@ export async function createRedisKv(url: string): Promise<KvStore> {
     async publish(channel, message) {
       await client.publish(channel, message);
     },
+    async subscribe(channel, onMessage) {
+      // A Redis connection in subscribe mode can't run other commands: use a dedicated one.
+      const sub = client.duplicate();
+      sub.on('error', (err: unknown) => {
+        console.error('[redis] subscriber error:', err instanceof Error ? err.message : err);
+      });
+      await sub.connect();
+      await sub.subscribe(channel, (message) => onMessage(message));
+      return async () => {
+        await sub.unsubscribe(channel);
+        await sub.close();
+      };
+    },
     async del(key) {
       await client.del(key);
     },
@@ -73,6 +88,7 @@ export function createMemoryKv(
 ): KvStore & { published: { channel: string; message: string }[] } {
   const data = new Map<string, { value: string; expiresAt: number }>();
   const published: { channel: string; message: string }[] = [];
+  const handlers = new Map<string, ((message: string) => void)[]>();
 
   const read = (key: string) => {
     const entry = data.get(key);
@@ -97,6 +113,18 @@ export function createMemoryKv(
     published,
     async publish(channel, message) {
       published.push({ channel, message });
+      for (const h of handlers.get(channel) ?? []) h(message);
+    },
+    async subscribe(channel, onMessage) {
+      const list = handlers.get(channel) ?? [];
+      list.push(onMessage);
+      handlers.set(channel, list);
+      return async () => {
+        handlers.set(
+          channel,
+          (handlers.get(channel) ?? []).filter((h) => h !== onMessage),
+        );
+      };
     },
     async take(key) {
       const entry = read(key);
