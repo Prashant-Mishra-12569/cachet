@@ -41,8 +41,7 @@ async function main(): Promise<void> {
   if (process.argv.includes('--scam')) {
     const scamId = await agentIdByName(bolna, UNVERIFIED_AGENT.name);
     if (!scamId) fail('Run "pnpm voice:setup" first.');
-    console.log('SCAM SCENE (demo): "Saffron Trust Bank" (fictional) calls WITHOUT a Cachet seal.');
-    console.log('  Never say a real code on this call: the AI stops and reveals the demo if you do.');
+    console.log('NO-SEAL CALL (demo): an AI caller WITHOUT a Cachet seal (it says it is a demo).');
     console.log('  → No green card will arrive. Ask the bot /check during the call: it says NOT verified.\n');
     const id = await bolna.startCall({ agentId: scamId, to, userData: {} });
     const end = await bolna.waitUntilOver(id, { onStatus: log });

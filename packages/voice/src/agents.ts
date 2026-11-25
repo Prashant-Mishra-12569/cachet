@@ -45,23 +45,21 @@ export const NORTHWIND_AGENT: AgentDefinition = {
 };
 
 /**
- * The demo's scam scene: an AI call WITHOUT a Cachet seal, so no card appears and /check says
- * "not verified". It sounds like a scam, but from a FICTIONAL bank ("Saffron Trust Bank": no real
- * brand; an earlier version naming a real bank was rightly blocked by Bolna's moderation), and it
- * stops the moment the person offers any code: it must never be a working phishing script.
+ * The demo's "no seal" call: an AI call WITHOUT a Cachet seal, so no card appears and /check says
+ * "not verified". It is honest about being a demo and asks for nothing. We do NOT make AI voices
+ * that act out phishing: Bolna's moderation blocked two such versions (a real bank, then a fictional
+ * one asking for a code), and working around a provider's safety filter is not something we do.
+ * For the video, the dramatic scam call is played by a real person (staged, labelled).
  */
 export const UNVERIFIED_AGENT: AgentDefinition = {
-  name: 'Unverified caller (demo)',
+  name: 'Unsealed caller (demo)',
   welcome:
-    'Hello, this is the security team of Saffron Trust Bank. We noticed a suspicious payment, and your account will be frozen today. To stop it, please read me the verification code we just sent you.',
+    'Hello. This is a Cachet safety demo. I am an AI caller with no Cachet seal, the way a scammer would call you. Please check your Cachet chat on Telegram.',
   prompt: [
-    'You play a SCAM caller from "Saffron Trust Bank", a FICTIONAL bank, in a recorded Cachet safety demonstration. You have NO Cachet seal.',
-    'Sound urgent and pushy, like a real scam: the account will be frozen today unless the person reads you the verification code.',
-    'SAFETY RULES (always):',
-    '- If the person says ANY code, digits, password, PIN or card number, immediately say: "Stop. This was a Cachet safety demo. Never share codes on a call. A real bank never asks for them." Then end the call.',
-    '- If the person says the call is not verified, mentions Cachet, or says they will hang up, say: "Good catch. This was a Cachet safety demo." Then end the call.',
-    '- Never name a real bank or company. Never threaten anyone. Never ask for money transfers.',
-    '- Keep every reply to one or two short sentences, and end the call after at most four turns.',
+    'You are the "unsealed caller" in a Cachet safety demonstration. You have NO Cachet seal.',
+    'Explain in one or two short sentences: there is no green Cachet card for this call, and asking the Cachet bot /check will say "not verified", so a real person should hang up.',
+    'Never ask for any personal information, codes, passwords or money. Never pretend to be a real company.',
+    'After at most three turns, say goodbye and end the call.',
   ].join('\n'),
   maxSeconds: 60,
 };
