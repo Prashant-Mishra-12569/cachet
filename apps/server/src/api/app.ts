@@ -16,6 +16,7 @@ import { browserPayRoutes } from './routes/pay';
 import { creditRoutes } from './routes/credits';
 import { sealRoutes, wellKnownRoutes, type SealRouteDeps } from './routes/seals';
 import { businessRoutes } from './routes/business';
+import type { PublicStatsService } from '../stats/public-stats';
 
 export interface AppDeps {
   network: Network;
@@ -36,6 +37,8 @@ export interface AppDeps {
   x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
   miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
+  /** Live totals for the public website (/v1/stats). */
+  stats?: PublicStatsService;
   /** Extra health checks (database, verifier); each returns true when healthy. */
   checks?: Record<string, () => Promise<boolean>>;
 }
@@ -59,6 +62,15 @@ export function createApp(deps: AppDeps) {
       ...Object.fromEntries(results),
     });
   });
+
+  if (deps.stats) {
+    const stats = deps.stats;
+    // Public totals for the landing page (no people, no codes). Cached 30 s here and at the edge.
+    app.get('/v1/stats', async (c) => {
+      c.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      return c.json(await stats.get());
+    });
+  }
 
   app.route('/v1/auth', authRoutes(deps));
   app.route('/v1/business', businessRoutes(deps));

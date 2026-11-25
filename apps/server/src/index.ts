@@ -42,6 +42,7 @@ import type { FacilitatorClient } from '@x402/core/server';
 import { NETWORK_CONFIG } from '@cachet/shared';
 import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
+import { createPublicStats, createStatsSource } from './stats/public-stats';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
@@ -291,6 +292,7 @@ const app = createApp({
         },
       }
     : {}),
+  stats: createPublicStats({ source: createStatsSource(database.db), network: env.CCD_NETWORK }),
   checks: { database: () => database.ping(), verifier: () => verifier.health() },
 });
 
