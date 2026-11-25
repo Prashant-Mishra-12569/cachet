@@ -60,3 +60,31 @@ export async function getPublicSeal(id: string): Promise<PublicSeal | null> {
   if (!res.ok) throw new Error(`Cachet server returned HTTP ${res.status}`);
   return (await res.json()) as PublicSeal;
 }
+
+export interface PublicStats {
+  network: string;
+  sealsTotal: number;
+  sealsLast24h: number;
+  sealsInPublicRecord: number;
+  companiesVerified: number;
+  aiCallersActive: number;
+  paymentsTotal: number;
+  lastRecord: { txHash: string; txUrl: string; items: number; at: string } | null;
+  updatedAt: string;
+}
+
+/**
+ * Live totals for the landing page. Refreshed at most every 30 s. Null when the server can't be
+ * reached: the page then simply leaves the live numbers out instead of failing.
+ */
+export async function getPublicStats(): Promise<PublicStats | null> {
+  try {
+    const res = await fetch(`${API_URL}/v1/stats`, {
+      next: { revalidate: 30 },
+      signal: AbortSignal.timeout(5_000),
+    });
+    return res.ok ? ((await res.json()) as PublicStats) : null;
+  } catch {
+    return null;
+  }
+}

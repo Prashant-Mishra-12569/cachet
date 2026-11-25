@@ -14,6 +14,13 @@
   --color-lilac: #d9d3ff;
   --color-lilac-soft: #f4f1ff;
   --color-gold: #c8a24a;
+  --color-night: #141613;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), Georgia, 'Times New Roman', serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SFMono-Regular', monospace;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
 }
 
 html {
@@ -47,4 +54,148 @@ body {
   border: 1px solid var(--color-line);
   background: var(--color-surface);
   padding: 1.25rem;
+}
+
+/* ───────────── Landing page ───────────── */
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-seal);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.hero-wash {
+  background:
+    radial-gradient(60rem 36rem at 85% -10%, #d9d3ff 0%, rgb(217 211 255 / 0) 60%),
+    radial-gradient(40rem 30rem at 100% 70%, #f4f1ff 0%, rgb(244 241 255 / 0) 70%), var(--color-bg);
+}
+
+/* The hero demo: one orchestrated sequence, replayed by re-mounting. Base styles are the FINAL
+   state, so with reduced motion everything is simply shown. */
+.demo-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgb(255 255 255 / 0.5);
+  animation: demo-ring 1.4s ease-out 3;
+  opacity: 0;
+}
+@keyframes demo-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+.demo-buzz {
+  animation: demo-buzz 0.5s ease-in-out 2;
+}
+@keyframes demo-buzz {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-1.2deg);
+  }
+  75% {
+    transform: rotate(1.2deg);
+  }
+}
+.demo-drop {
+  animation: demo-drop 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes demo-drop {
+  from {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+}
+.demo-stamp {
+  animation: demo-stamp 0.6s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+@keyframes demo-stamp {
+  0% {
+    transform: scale(2.4) rotate(-28deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.9) rotate(-10deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-12deg);
+  }
+}
+.demo-ripple {
+  animation: demo-ripple 0.8s ease-out both;
+}
+@keyframes demo-ripple {
+  from {
+    transform: scale(0.5);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.demo-rise {
+  animation: demo-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes demo-rise {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-ring::after,
+  .demo-buzz,
+  .demo-drop,
+  .demo-stamp,
+  .demo-ripple,
+  .demo-rise {
+    animation: none !important;
+  }
+}
+
+/* How it works: four glass layers, stacked in 3D; the current step lifts and lights up. */
+.layer-stack {
+  perspective: 1400px;
+}
+.layer-plate {
+  transform: rotateX(56deg) rotateZ(-36deg) translateZ(calc(var(--i) * 58px));
+  transition:
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.4s,
+    border-color 0.4s,
+    box-shadow 0.4s;
+}
+/* Wide screens: the layers above the step being read move up, so the current layer shows fully. */
+@media (min-width: 1024px) {
+  .layer-plate {
+    transform: rotateX(56deg) rotateZ(-36deg) translateZ(calc(var(--i) * 40px));
+  }
+  .layer-plate[data-above='true'] {
+    transform: rotateX(56deg) rotateZ(-36deg) translateZ(calc(var(--i) * 40px + 84px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layer-plate {
+    transition: none;
+  }
 }
