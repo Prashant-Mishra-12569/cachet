@@ -229,3 +229,14 @@ html {
     transition: none;
   }
 }
+
+/* Printable pages (the compliance report): A4 with sensible margins, no page background. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body {
+    background: #fff;
+  }
+}

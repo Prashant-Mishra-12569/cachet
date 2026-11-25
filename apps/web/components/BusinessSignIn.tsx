@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { NETWORK } from '@/lib/config';
 import { connectWallet, signWithWallet, WALLET_SETUP_URL, WalletError } from '@/lib/wallet';
 import { BusinessDashboard } from './BusinessDashboard';
+import { CachetLogo } from './brand/Seal';
 
 type Me = { account: string; expiresAt: string };
 type Step = 'checking' | 'signed-out' | 'connecting' | 'approving' | 'verifying' | 'signed-in';
@@ -14,9 +16,6 @@ const STEP_TEXT: Partial<Record<Step, string>> = {
   approving: 'Approve the sign-in message in your wallet.',
   verifying: 'Checking your approval…',
 };
-
-/** "35sHhKYuw7…pkB5z" */
-const shortAccount = (a: string) => `${a.slice(0, 6)}…${a.slice(-5)}`;
 
 export function BusinessSignIn() {
   const [step, setStep] = useState<Step>('checking');
@@ -76,67 +75,63 @@ export function BusinessSignIn() {
 
   const busy = step === 'connecting' || step === 'approving' || step === 'verifying';
 
+  if (step === 'signed-in' && me) return <BusinessDashboard account={me.account} onSignOut={signOut} />;
+
   return (
-    <section className="w-full max-w-lg rounded-[20px] border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/.04),0_8px_24px_rgb(0_0_0/.06)] sm:p-8">
-      {step === 'signed-in' && me ? (
-        <div className="flex flex-col gap-4">
-          <p className="inline-flex w-fit items-center gap-2 rounded-full bg-seal-soft px-3 py-1 text-sm font-medium text-seal">
-            <span aria-hidden="true">✓</span> Signed in
+    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-8 px-4 py-16">
+      <div className="text-center">
+        <Link href="/" aria-label="Cachet home" className="inline-flex min-h-11 items-center">
+          <CachetLogo className="h-9 w-auto" />
+        </Link>
+        <h1 className="mt-4 text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+          Prove it&apos;s really you calling.
+        </h1>
+      </div>
+      <section className="w-full max-w-lg rounded-[20px] border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/.04),0_8px_24px_rgb(0_0_0/.06)] sm:p-8">
+        {step === 'checking' ? (
+          <p className="text-sm text-ink-2" aria-live="polite">
+            Checking your sign-in…
           </p>
-          <div>
-            <h2 className="text-xl font-semibold">You&apos;re signed in</h2>
-            <p className="mt-1 text-ink-2">
-              Account <span className="font-mono text-ink">{shortAccount(me.account)}</span>
-            </p>
-          </div>
-          <BusinessDashboard account={me.account} />
-          <button
-            type="button"
-            onClick={signOut}
-            className="min-h-11 w-fit rounded-full border border-line px-5 text-sm font-medium transition hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal active:scale-[0.98]"
-          >
-            Sign out
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Sign in for businesses</h2>
-            <p className="mt-1 text-ink-2">
-              Use your Concordium Wallet with your company account. You&apos;ll approve a sign-in message. No
-              payment, no fee.
-            </p>
-          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">Sign in for businesses</h2>
+              <p className="mt-1 text-ink-2">
+                Use your Concordium Wallet with your company account. You&apos;ll approve a sign-in message.
+                No payment, no fee.
+              </p>
+            </div>
 
-          <button
-            type="button"
-            onClick={signIn}
-            disabled={busy || step === 'checking'}
-            className="min-h-12 rounded-full bg-ink px-6 font-medium text-surface transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy ? 'Waiting for your wallet…' : 'Sign in with Concordium'}
-          </button>
+            <button
+              type="button"
+              onClick={signIn}
+              disabled={busy}
+              className="min-h-12 rounded-full bg-ink px-6 font-medium text-surface transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy ? 'Waiting for your wallet…' : 'Sign in with Concordium'}
+            </button>
 
-          <div aria-live="polite" className="min-h-6 text-sm">
-            {busy && <p className="text-ink-2">{STEP_TEXT[step]}</p>}
-            {error && (
-              <div className="rounded-xl bg-alert-soft px-4 py-3 text-alert" role="alert">
-                <p>{error.message}</p>
-                {error.showSetup && (
-                  <a
-                    href={WALLET_SETUP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 inline-block font-medium underline underline-offset-2"
-                  >
-                    How to get the Concordium Wallet ↗
-                  </a>
-                )}
-              </div>
-            )}
+            <div aria-live="polite" className="min-h-6 text-sm">
+              {busy && <p className="text-ink-2">{STEP_TEXT[step]}</p>}
+              {error && (
+                <div className="rounded-xl bg-alert-soft px-4 py-3 text-alert" role="alert">
+                  <p>{error.message}</p>
+                  {error.showSetup && (
+                    <a
+                      href={WALLET_SETUP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-block font-medium underline underline-offset-2"
+                    >
+                      How to get the Concordium Wallet ↗
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+    </main>
   );
 }
