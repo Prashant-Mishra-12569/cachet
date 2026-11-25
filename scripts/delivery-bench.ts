@@ -134,7 +134,7 @@ async function main(): Promise<void> {
             v: 'cachet-seal-close/1',
             sealId,
             agentAccount: account,
-            reason: 'completed',
+            reason: 'cancelled', // a test: no phone call took place
             nonce: randomBytes(16).toString('hex'),
             ts: nowS(),
           },
