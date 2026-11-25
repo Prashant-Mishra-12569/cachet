@@ -4,11 +4,18 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 const sans = Geist({ subsets: ['latin'], variable: '--font-geist', display: 'swap' });
-const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono', display: 'swap' });
+// Mono is only for call codes and code samples, never the first thing painted: don't preload it.
+const mono = Geist_Mono({
+  subsets: ['latin'],
+  variable: '--font-geist-mono',
+  display: 'swap',
+  preload: false,
+});
 const serif = Instrument_Serif({
   subsets: ['latin'],
   weight: '400',
-  style: ['normal', 'italic'],
+  // Only the italic is used (the headline accent and quotes): one file instead of two.
+  style: 'italic',
   variable: '--font-instrument',
   display: 'swap',
 });
