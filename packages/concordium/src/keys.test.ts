@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadAccountKey } from './keys';
+import { loadAccountKey, loadAccountKeyFromBase64 } from './keys';
 
 // A real-format testnet address (public, from the Agent Registry listing). No keys involved.
 const ADDRESS = '3dt3UMPzRASZndjmKpSWgCP2HhmoxZrgs8FDPtZjNHZzj13hhB';
@@ -38,5 +38,20 @@ describe('loadAccountKey safety checks', () => {
     const result = loadAccountKey({ path, expectedAddress: ADDRESS, network: 'testnet' });
     await expect(result).rejects.toThrow('Not a valid Concordium wallet export');
     await expect(result).rejects.not.toThrow('super-secret');
+  });
+});
+
+describe('loadAccountKeyFromBase64 (hosting secrets)', () => {
+  it('rejects content that is not a wallet export, naming only the setting, never the content', () => {
+    const base64 = Buffer.from('super-secret-not-json').toString('base64');
+    const load = () =>
+      loadAccountKeyFromBase64({
+        base64,
+        label: 'CCD_SPONSOR_KEY_B64',
+        expectedAddress: ADDRESS,
+        network: 'testnet',
+      });
+    expect(load).toThrow('Not a valid Concordium wallet export: CCD_SPONSOR_KEY_B64');
+    expect(load).not.toThrow('super-secret');
   });
 });

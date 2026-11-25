@@ -13,6 +13,7 @@ import {
   createRegistryClient,
   createTxSender,
   loadAccountKey,
+  loadAccountKeyFromBase64,
   verifyAccountMessage,
 } from '@cachet/concordium';
 import { loadSealSigningKey } from '@cachet/shared/seal';
@@ -147,15 +148,24 @@ const people = createPeopleRepo(database.db);
 const familyRepo = createFamilyRepo(database.db);
 
 // The sponsor account pays Cachet's on-chain fees: anchoring AND people's safe payments.
-const sponsorKey =
-  env.CCD_SPONSOR_KEY_PATH && env.CCD_SPONSOR_ADDRESS
-    ? await loadAccountKey({
-        path: env.CCD_SPONSOR_KEY_PATH,
+// Locally: a key file outside the repo. Hosted: the export's content in a secret setting (base64).
+const sponsorKey = !env.CCD_SPONSOR_ADDRESS
+  ? null
+  : env.CCD_SPONSOR_KEY_B64
+    ? loadAccountKeyFromBase64({
+        base64: env.CCD_SPONSOR_KEY_B64,
+        label: 'CCD_SPONSOR_KEY_B64',
         expectedAddress: env.CCD_SPONSOR_ADDRESS,
         network: env.CCD_NETWORK,
-        forbiddenDir: fileURLToPath(new URL('../../../', import.meta.url)),
       })
-    : null;
+    : env.CCD_SPONSOR_KEY_PATH
+      ? await loadAccountKey({
+          path: env.CCD_SPONSOR_KEY_PATH,
+          expectedAddress: env.CCD_SPONSOR_ADDRESS,
+          network: env.CCD_NETWORK,
+          forbiddenDir: fileURLToPath(new URL('../../../', import.meta.url)),
+        })
+      : null;
 
 // A wrong decimals setting would make every amount wrong by a factor of 10^n: check it on chain.
 let decimalsOk = true;

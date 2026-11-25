@@ -83,6 +83,8 @@ const EnvSchema = z.object({
   /** Anchor the ledger when the oldest item is this old (plan: 5 minutes). */
   ANCHOR_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(300),
   CCD_SPONSOR_KEY_PATH: optionalString,
+  /** Hosting (Railway): the sponsor's wallet export as base64, instead of a file path. */
+  CCD_SPONSOR_KEY_B64: optionalString,
   /** The Protocol-Level Token used for payments (EUDemo on testnet). */
   PLT_TOKEN_ID: z.string().min(1).default('EUDemo'),
   /** Decimals of that token (EUDemo: 6). Checked against the chain at start-up. */

@@ -47,12 +47,39 @@ export async function loadAccountKey(options: LoadKeyOptions): Promise<LoadedAcc
   } catch {
     throw new Error(`Cannot read key file: ${options.path}`);
   }
+  return keyFromExport(raw, options.path, options);
+}
 
+/**
+ * The same, from the export's CONTENT (base64), for hosting where secrets are settings, not files
+ * (e.g. Railway). Same checks; errors never contain key material.
+ */
+export function loadAccountKeyFromBase64(options: {
+  base64: string;
+  /** Used in error messages only, e.g. "CCD_SPONSOR_KEY_B64". */
+  label: string;
+  expectedAddress: string;
+  network: Network;
+}): LoadedAccountKey {
+  let raw: string;
+  try {
+    raw = Buffer.from(options.base64.trim(), 'base64').toString('utf8');
+  } catch {
+    throw new Error(`${options.label} is not valid base64`);
+  }
+  return keyFromExport(raw, options.label, options);
+}
+
+function keyFromExport(
+  raw: string,
+  source: string,
+  options: { expectedAddress: string; network: Network },
+): LoadedAccountKey {
   let wallet: ReturnType<typeof parseWallet>;
   try {
     wallet = parseWallet(raw);
   } catch {
-    throw new Error(`Not a valid Concordium wallet export: ${options.path}`);
+    throw new Error(`Not a valid Concordium wallet export: ${source}`);
   }
 
   if (wallet.environment !== options.network) {
