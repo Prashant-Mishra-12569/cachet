@@ -20,6 +20,15 @@ Create one project with four services:
 
 Keep exactly **one** replica of `server`: the Telegram bot and the anchoring worker must not run twice.
 
+Each service also gets `RAILWAY_DOCKERFILE_PATH` (`apps/server/Dockerfile` / `infra/verifier/Dockerfile`)
+so Railway always builds with our Dockerfiles; without it Railway's auto-builder guesses and fails on
+the monorepo ("No start command detected"). Root Directory stays empty (the repository root).
+`server` also gets `PORT=8787`, the same port its custom domain targets (Railway otherwise assigns 8080
+and the domain answers 502).
+
+On Vercel, `getcachet.site` must be the **primary** domain and `www` must redirect to it: the server
+only accepts sign-in requests from `WEB_ORIGIN` (`https://getcachet.site`).
+
 ### `verifier` variables
 
 | Variable                                             | Value                                                 |

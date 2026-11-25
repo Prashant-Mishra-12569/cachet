@@ -73,6 +73,10 @@ if (which === 'server') {
   ]) {
     if (!vars.has(must)) fail(`${must} is empty in .env.`);
   }
+  // Build with OUR Dockerfile (otherwise Railway's auto-builder guesses, and fails on the monorepo).
+  vars.set('RAILWAY_DOCKERFILE_PATH', 'apps/server/Dockerfile');
+  // Fixed port, matching the custom domain's target port (Railway would otherwise pick 8080).
+  vars.set('PORT', '8787');
   vars.set('NODE_ENV', 'production');
   vars.set('TRUST_PROXY', 'true');
   vars.set('WEB_ORIGIN', `https://${DOMAIN}`);
@@ -83,6 +87,7 @@ if (which === 'server') {
   vars.set('VERIFIER_HEALTH_URL', 'http://${{verifier.RAILWAY_PRIVATE_DOMAIN}}:8001/health');
   vars.set('CCD_SPONSOR_KEY_B64', b64File('CCD_SPONSOR_KEY_PATH'));
 } else if (which === 'verifier') {
+  vars.set('RAILWAY_DOCKERFILE_PATH', 'infra/verifier/Dockerfile');
   vars.set('VERIFIER_KEY_B64', b64File('CCD_VERIFIER_KEY_PATH'));
   vars.set(
     'CREDENTIAL_VERIFICATION_SERVICE_NODE_GRPC_ENDPOINT',
