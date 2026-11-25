@@ -88,4 +88,65 @@ describe('Cachet SDK', () => {
       reason: 'no_answer',
     });
   });
+
+  /** Answers in order; an Error entry = the connection failed (like Node's "fetch failed"). */
+  function scripted(answers: ({ status: number; body: unknown } | Error)[]) {
+    const nonces: unknown[] = [];
+    const waits: number[] = [];
+    const fetch = (async (_url: string, init: RequestInit) => {
+      nonces.push((JSON.parse(String(init.body)) as { request: { nonce: unknown } }).request.nonce);
+      const next = answers.shift();
+      if (!next || next instanceof Error) throw next ?? new Error('no answer scripted');
+      return new Response(JSON.stringify(next.body), { status: next.status });
+    }) as unknown as typeof globalThis.fetch;
+    const cachet = createCachetClient({
+      baseUrl: 'http://x',
+      badge: 'B',
+      account: ACCOUNT,
+      signer,
+      fetch,
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    return { cachet, nonces, waits };
+  }
+
+  it('closing keeps trying through a lost connection and a server error (phone hotspot during a call)', async () => {
+    const { cachet, nonces, waits } = scripted([
+      new TypeError('fetch failed'),
+      { status: 503, body: { error: { code: 'unavailable' } } },
+      { status: 200, body: { status: 'closed' } },
+    ]);
+    expect(await cachet.closeSeal('01ABC', 'completed')).toBe('closed');
+    expect(waits).toEqual([1_000, 2_000]);
+    expect(new Set(nonces).size).toBe(3); // every try is freshly signed
+  });
+
+  it('an earlier try that did reach Cachet (or an expired seal) counts as ended, not as an error', async () => {
+    const { cachet } = scripted([
+      new TypeError('fetch failed'),
+      { status: 409, body: { error: { code: 'seal_not_open', message: 'no longer open' } } },
+    ]);
+    expect(await cachet.closeSeal('01ABC', 'completed')).toBe('already_ended');
+  });
+
+  it('a clear refusal is not retried', async () => {
+    const { cachet, nonces } = scripted([
+      { status: 401, body: { error: { code: 'seal_bad_signature', message: 'bad signature' } } },
+    ]);
+    await expect(cachet.closeSeal('01ABC', 'completed')).rejects.toMatchObject({
+      code: 'seal_bad_signature',
+    });
+    expect(nonces).toHaveLength(1);
+  });
+
+  it('gives up after the retry window, with the last error', async () => {
+    const { cachet, nonces } = scripted(Array.from({ length: 20 }, () => new TypeError('fetch failed')));
+    await expect(cachet.closeSeal('01ABC', 'completed', { retryForMs: 5_000 })).rejects.toThrow(
+      'fetch failed',
+    );
+    expect(nonces.length).toBeGreaterThan(1);
+    expect(nonces.length).toBeLessThan(20);
+  });
 });

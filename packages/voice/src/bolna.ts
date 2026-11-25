@@ -191,8 +191,10 @@ export function createBolna(options: BolnaOptions) {
         try {
           e = await getExecution(id);
         } catch (err) {
-          // A brief API hiccup must not abandon an open seal: keep asking until the deadline.
-          if (!(err instanceof BolnaError) || err.status < 500) throw err;
+          // A brief API hiccup or a lost connection (e.g. a phone hotspot that pauses data during the
+          // call) must not abandon an open seal: keep asking until the deadline. Only a clear "no"
+          // from Bolna (4xx other than rate limiting) stops the wait.
+          if (err instanceof BolnaError && err.status < 500 && err.status !== 429) throw err;
         }
         if (e) {
           if (e.status === 'in-progress') answered = true;

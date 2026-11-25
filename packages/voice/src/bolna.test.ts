@@ -102,6 +102,25 @@ describe('Bolna client', () => {
     expect(closeReasonFor(e)).toBe('no_answer');
   });
 
+  it('rides out a lost connection while waiting (phone hotspot pauses data during the call)', async () => {
+    const answers: (Error | { status: number; body: unknown })[] = [
+      { status: 200, body: { id: 'ex-4', status: 'in-progress' } },
+      new TypeError('fetch failed'),
+      new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+      { status: 429, body: { message: 'slow down' } },
+      { status: 200, body: { id: 'ex-4', status: 'call-disconnected', conversation_duration: 0 } },
+    ];
+    const fetch = (async () => {
+      const next = answers.shift();
+      if (!next || next instanceof Error) throw next ?? new Error('none left');
+      return new Response(JSON.stringify(next.body), { status: next.status });
+    }) as unknown as typeof globalThis.fetch;
+    const bolna = createBolna({ apiKey: KEY, fetch, sleep: async () => undefined });
+    const e = await bolna.waitUntilOver('ex-4');
+    expect(e.answered).toBe(true);
+    expect(closeReasonFor(e)).toBe('completed');
+  });
+
   it('a client error while waiting stops (no endless loop)', async () => {
     const api = fakeApi({ '/executions/x': [{ status: 404, body: { message: 'no such call' } }] });
     const bolna = createBolna({ apiKey: KEY, fetch: api.fetch, sleep: async () => undefined });

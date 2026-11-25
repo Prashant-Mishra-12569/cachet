@@ -81,19 +81,24 @@ async function main(): Promise<void> {
   console.log(`    the AI will say: "${seal.firstLine}"`);
 
   let closed = false;
-  async function close(reason: CloseReason) {
+  async function close(reason: CloseReason, retryForMs?: number) {
     if (closed) return;
     closed = true;
     try {
-      await cachet.closeSeal(seal.sealId, reason);
-      console.log(`✓ ${since(started)}  seal closed (${reason}) → the card now says the call ended`);
+      const result = await cachet.closeSeal(seal.sealId, reason, retryForMs ? { retryForMs } : {});
+      console.log(
+        result === 'closed'
+          ? `✓ ${since(started)}  seal closed (${reason}) → the card now says the call ended`
+          : `✓ ${since(started)}  seal had already ended → the card says so`,
+      );
     } catch (err) {
-      console.error(`✗ could not close the seal: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`✗ could not close the seal: ${errorText(err)}`);
+      console.error(`  It ends by itself at ${seal.expiresAt} (the card then says it expired).`);
     }
   }
   process.once('SIGINT', () => {
     console.log('\nStopping: closing the seal first…');
-    void close('cancelled').finally(() => {
+    void close('cancelled', 10_000).finally(() => {
       process.exitCode = 130;
       setTimeout(() => process.exit(130), 1500).unref();
     });
@@ -131,10 +136,12 @@ async function main(): Promise<void> {
 
   // Honest caller ID: the number the person saw must be the one the seal promised.
   // Bolna fills in the final record (duration, caller ID) a little after the line drops: wait for it.
-  let full = await bolna.getExecution(executionId);
-  for (let i = 0; i < 15 && (full.status === 'call-disconnected' || !full.fromNumber); i++) {
+  // (Connection trouble here only affects this report: the seal is already closed.)
+  let full: Execution = end;
+  for (let i = 0; i < 16; i++) {
+    full = await bolna.getExecution(executionId).catch(() => full);
+    if (full.status !== 'call-disconnected' && full.fromNumber) break;
     await new Promise((r) => setTimeout(r, 2000));
-    full = await bolna.getExecution(executionId);
   }
   console.log(`\nCall: ${full.status} (${full.terminationReason ?? '?'}), ${full.durationSeconds ?? '?'} s`);
   if (full.fromNumber && full.fromNumber !== callerId) {
@@ -147,6 +154,13 @@ async function main(): Promise<void> {
     console.log(`✓ caller ID matches the seal: ${full.fromNumber}`);
   }
   console.log(`Public seal page: ${seal.verifyUrl}`);
+}
+
+/** Readable error, including the network reason behind Node's bare "fetch failed". */
+function errorText(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+  return cause?.code || cause?.message ? `${err.message} (${cause.code ?? cause.message})` : err.message;
 }
 
 main().catch(stop);

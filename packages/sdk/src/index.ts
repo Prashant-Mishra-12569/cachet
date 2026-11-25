@@ -15,6 +15,8 @@ export interface CachetClientOptions {
   account: string;
   signer: AccountSigner;
   fetch?: typeof fetch;
+  /** For tests: how to wait between retries. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface SealCallInput {
@@ -47,6 +49,9 @@ export interface Seal {
 
 export type CloseReason = 'completed' | 'no_answer' | 'failed' | 'cancelled';
 
+/** "closed" = this request ended it; "already_ended" = it had already ended (closed, replaced or expired). */
+export type CloseResult = 'closed' | 'already_ended';
+
 export class CachetError extends Error {
   constructor(
     readonly status: number,
@@ -64,13 +69,20 @@ export function createCachetClient(options: CachetClientOptions) {
   const address = AccountAddress.fromBase58(options.account);
   const nonce = () => randomBytes(16).toString('hex');
   const now = () => Math.floor(Date.now() / 1000);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  async function post(path: string, request: Record<string, unknown>, message: (d: string) => string) {
+  async function post(
+    path: string,
+    request: Record<string, unknown>,
+    message: (d: string) => string,
+    timeoutMs?: number,
+  ) {
     const signature = await signMessage(address, message(sha256Hex(canonicalize(request))), options.signer);
     const res = await http(`${base}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ request, signature }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
@@ -110,20 +122,45 @@ export function createCachetClient(options: CachetClientOptions) {
       return { ...(body as unknown as Omit<Seal, 'x402Tx'>), x402Tx };
     },
 
-    /** The call ended: close the seal so the person's card stops showing it as verified. */
-    async closeSeal(sealId: string, reason: CloseReason): Promise<void> {
-      await post(
-        `/v1/seals/${encodeURIComponent(sealId)}/close`,
-        {
-          v: 'cachet-seal-close/1',
-          sealId,
-          agentAccount: options.account,
-          reason,
-          nonce: nonce(),
-          ts: now(),
-        },
-        sealCloseMessage,
-      );
+    /**
+     * The call ended: close the seal so the person's card stops showing it as verified.
+     * Keeps trying through lost connections and server hiccups for up to `retryForMs` (default 2 min):
+     * a seal left open would keep a green card for a call that is over. Each try is freshly signed
+     * (new nonce). If an earlier try did reach Cachet, the next one answers "already ended".
+     */
+    async closeSeal(
+      sealId: string,
+      reason: CloseReason,
+      opts: { retryForMs?: number } = {},
+    ): Promise<CloseResult> {
+      const giveUpAt = Date.now() + (opts.retryForMs ?? 120_000);
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await post(
+            `/v1/seals/${encodeURIComponent(sealId)}/close`,
+            {
+              v: 'cachet-seal-close/1',
+              sealId,
+              agentAccount: options.account,
+              reason,
+              nonce: nonce(),
+              ts: now(),
+            },
+            sealCloseMessage,
+            15_000,
+          );
+          return 'closed';
+        } catch (err) {
+          if (err instanceof CachetError) {
+            if (err.code === 'seal_not_open') return 'already_ended';
+            // A clear "no" (bad request, wrong signature, …) won't change by retrying.
+            if (err.status < 500 && err.status !== 429) throw err;
+          }
+          const wait = Math.min(15_000, 1_000 * 2 ** attempt);
+          if (Date.now() + wait > giveUpAt) throw err;
+          await sleep(wait);
+        }
+      }
     },
   };
 }
