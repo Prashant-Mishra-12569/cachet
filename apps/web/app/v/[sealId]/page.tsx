@@ -202,7 +202,9 @@ export default async function SealPage({ params }: Props) {
       </section>
 
       <details className="rounded-[20px] border border-line bg-surface p-5 text-sm sm:p-6">
-        <summary className="cursor-pointer font-medium">For the curious: technical details</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center font-medium">
+          For the curious: technical details
+        </summary>
         <dl className="mt-4 grid gap-3 font-mono text-xs break-all text-ink-2">
           <Detail label="Seal ID" value={seal.id} />
           <Detail label="Seal fingerprint (SHA-256)" value={seal.sealHash} />

@@ -12,7 +12,7 @@ export default function BusinessPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col items-center justify-center gap-8 px-4 py-16">
       <div className="text-center">
-        <Link href="/" aria-label="Cachet home" className="inline-flex">
+        <Link href="/" aria-label="Cachet home" className="inline-flex min-h-11 items-center">
           <CachetLogo className="h-9 w-auto" />
         </Link>
         <h1 className="mt-4 text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">

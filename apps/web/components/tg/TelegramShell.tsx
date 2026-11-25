@@ -87,7 +87,7 @@ function Outside() {
       </p>
       <a
         href={`https://t.me/${BOT_USERNAME}`}
-        className="mt-5 inline-block rounded-full bg-seal px-5 py-2.5 text-sm font-medium text-surface"
+        className="mt-5 inline-flex min-h-11 items-center rounded-full bg-seal px-5 text-sm font-medium text-surface"
       >
         Open @{BOT_USERNAME}
       </a>

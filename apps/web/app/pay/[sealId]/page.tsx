@@ -53,7 +53,10 @@ export default function BrowserPay({ params }: { params: Promise<{ sealId: strin
   }, [pass, sealId]);
 
   const backToTelegram = (
-    <a href={`https://t.me/${BOT_USERNAME}`} className="mt-3 block text-sm font-medium text-seal underline">
+    <a
+      href={`https://t.me/${BOT_USERNAME}`}
+      className="mt-3 flex min-h-11 items-center text-sm font-medium text-seal underline"
+    >
       Back to Telegram
     </a>
   );
