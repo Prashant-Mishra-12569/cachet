@@ -6,6 +6,8 @@
  *
  *   pnpm seal:smoke <badge> <calleeE164> [fromE164] [--keep-open]
  *
+ * fromE164 defaults to VOICE_CALLER_ID from .env (the number the AI really calls from, as registered
+ * on chain for this AI caller).
  * --keep-open: don't close the seal (so the bot's /check shows green for up to 15 minutes).
  */
 import { randomBytes } from 'node:crypto';
@@ -24,8 +26,10 @@ async function main(): Promise<void> {
   loadRootEnv();
   const args = process.argv.slice(2);
   const keepOpen = args.includes('--keep-open');
-  const [badge, to, from = to] = args.filter((a) => !a.startsWith('--'));
+  const [badge, to, fromArg] = args.filter((a) => !a.startsWith('--'));
   if (!badge || !to) fail('usage: pnpm seal:smoke <badge> <calleeE164> [fromE164] [--keep-open]');
+  const from = fromArg ?? process.env['VOICE_CALLER_ID']?.trim();
+  if (!from) fail('Pass the calling number as the 3rd argument, or set VOICE_CALLER_ID in .env.');
   const api = apiBase();
   const path = process.env['CCD_AGENT_KEY_PATH'];
   const account = process.env['CCD_AGENT_ADDRESS'];
