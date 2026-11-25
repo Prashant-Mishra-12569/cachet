@@ -130,6 +130,22 @@ function Phone({ mode }: { mode: Mode }) {
           </span>
         </div>
 
+        {/* once answered: end call (wide screens show the caption here instead) */}
+        <div
+          className="demo-rise absolute inset-x-0 bottom-8 flex justify-center lg:hidden"
+          style={at(answeredAt(mode))}
+          aria-hidden
+        >
+          <span className="grid size-14 place-items-center rounded-full bg-[#e5484d]">
+            <svg viewBox="0 0 24 24" className="size-6 rotate-[135deg]">
+              <path
+                fill="#fff"
+                d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2Z"
+              />
+            </svg>
+          </span>
+        </div>
+
         {/* what lands on the screen */}
         <div className="absolute inset-x-3 top-10">{mode === 'real' ? <SealedCard /> : <CheckRed />}</div>
       </div>
@@ -202,7 +218,7 @@ function Voice({ mode }: { mode: Mode }) {
     >
       <figure className="demo-rise rounded-[18px] bg-surface p-4 shadow-soft" style={at(real ? 2.2 : 1.0)}>
         <figcaption className="text-xs text-ink-2">{real ? 'The AI says' : 'The caller says'}</figcaption>
-        <blockquote className="mt-1 font-serif text-[19px] leading-snug">
+        <blockquote className="mt-1 font-serif text-[19px] leading-snug italic">
           {real
             ? '“Hi, this is Northwind Energy BV’s AI assistant. Your Cachet code is four-seven, two-one.”'
             : '“This is your bank’s security team. Your account is blocked. Read me the OTP we just sent.”'}
