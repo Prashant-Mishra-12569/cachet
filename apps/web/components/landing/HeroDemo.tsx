@@ -6,6 +6,8 @@ import { SealMark, WaxSeal } from '@/components/brand/Seal';
 type Mode = 'real' | 'scam';
 
 const at = (seconds: number): CSSProperties => ({ animationDelay: `${seconds}s` });
+/** When the person picks up: just before the voice speaks. */
+const answeredAt = (mode: Mode) => (mode === 'real' ? 1.95 : 0.75);
 
 /**
  * The whole product in three seconds: a phone rings from an unknown number, the Cachet card lands
@@ -22,7 +24,7 @@ export function HeroDemo() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[400px]">
+    <div className="hero-demo mx-auto w-full max-w-[400px]">
       <div
         role="group"
         aria-label="Choose who is calling"
@@ -52,12 +54,12 @@ export function HeroDemo() {
         ))}
       </div>
 
-      <div key={`${mode}-${run}`}>
+      <div key={`${mode}-${run}`} className="relative">
         <Phone mode={mode} />
         <Voice mode={mode} />
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 text-sm text-ink-2">
+      <div className="mt-4 flex items-center justify-between gap-3 text-sm text-ink-2 lg:mt-14">
         <p>Demo: Northwind Energy BV is a test company.</p>
         <button
           type="button"
@@ -83,21 +85,33 @@ function Phone({ mode }: { mode: Mode }) {
         </div>
 
         {/* incoming call */}
-        <div className="mt-[80%] flex flex-col items-center text-center">
-          <div className="demo-ring relative grid size-20 place-items-center rounded-full bg-white/10">
-            <svg viewBox="0 0 24 24" className="size-9 opacity-80" aria-hidden>
+        <div className="mt-[74%] flex flex-col items-center text-center">
+          <div className="demo-ring relative grid size-16 place-items-center rounded-full bg-white/10">
+            <svg viewBox="0 0 24 24" className="size-8 opacity-80" aria-hidden>
               <path
                 fill="currentColor"
                 d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"
               />
             </svg>
           </div>
-          <p className="mt-4 text-xl font-medium">Unknown number</p>
-          <p className="mt-1 text-sm opacity-60">incoming call</p>
+          <p className="mt-3 text-lg font-medium">Unknown number</p>
+          {/* the call is answered just before the voice speaks */}
+          <p className="mt-1 grid text-sm">
+            <span className="demo-out col-start-1 row-start-1 opacity-0" style={at(answeredAt(mode))}>
+              <span className="opacity-60">incoming call</span>
+            </span>
+            <span className="demo-rise col-start-1 row-start-1 opacity-60" style={at(answeredAt(mode))}>
+              on the call
+            </span>
+          </p>
         </div>
 
         {/* answer / decline */}
-        <div className="absolute inset-x-0 bottom-8 flex justify-around px-8" aria-hidden>
+        <div
+          className="demo-out absolute inset-x-0 bottom-8 flex justify-around px-8 opacity-0"
+          style={at(answeredAt(mode))}
+          aria-hidden
+        >
           <span className="grid size-14 place-items-center rounded-full bg-[#e5484d]">
             <svg viewBox="0 0 24 24" className="size-6 rotate-[135deg]">
               <path
@@ -182,7 +196,10 @@ function CheckRed() {
 function Voice({ mode }: { mode: Mode }) {
   const real = mode === 'real';
   return (
-    <div className="mt-6 space-y-2" aria-live="polite">
+    <div
+      className="mt-6 space-y-2 lg:absolute lg:-bottom-10 lg:-left-16 lg:mt-0 lg:w-[300px] lg:drop-shadow-[0_18px_30px_rgb(20_22_19/0.18)]"
+      aria-live="polite"
+    >
       <figure className="demo-rise rounded-[18px] bg-surface p-4 shadow-soft" style={at(real ? 2.2 : 1.0)}>
         <figcaption className="text-xs text-ink-2">{real ? 'The AI says' : 'The caller says'}</figcaption>
         <blockquote className="mt-1 font-serif text-[19px] leading-snug">

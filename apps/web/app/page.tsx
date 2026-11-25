@@ -22,7 +22,7 @@ export default async function HomePage() {
       <main id="top">
         <section
           aria-labelledby="hero-title"
-          className="mx-auto grid max-w-[1200px] gap-12 px-4 pt-8 pb-20 sm:px-6 sm:pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10 lg:pb-28"
+          className="mx-auto grid max-w-[1200px] gap-12 px-4 pt-8 pb-20 sm:px-6 sm:pt-14 lg:min-h-[calc(100svh-76px)] lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-10 lg:py-6"
         >
           <div>
             <h1

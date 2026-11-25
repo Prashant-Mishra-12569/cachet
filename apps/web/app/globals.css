@@ -153,6 +153,17 @@ html {
     opacity: 0;
   }
 }
+.demo-out {
+  animation: demo-out 0.35s ease-in both;
+}
+@keyframes demo-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 .demo-rise {
   animation: demo-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -168,8 +179,27 @@ html {
   .demo-drop,
   .demo-stamp,
   .demo-ripple,
+  .demo-out,
   .demo-rise {
     animation: none !important;
+  }
+}
+
+/* Laptops: the hero (headline + phone demo) fits one screen. Shorter screens shrink the demo as a
+   whole (zoom keeps its proportions and its layout box), so nothing is cut off. */
+@media (min-width: 1024px) and (max-height: 820px) {
+  .hero-demo {
+    zoom: 0.82;
+  }
+}
+@media (min-width: 1024px) and (max-height: 719px) {
+  .hero-demo {
+    zoom: 0.72;
+  }
+}
+@media (min-width: 1024px) and (max-height: 651px) {
+  .hero-demo {
+    zoom: 0.64;
   }
 }
 
