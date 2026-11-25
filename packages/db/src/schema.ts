@@ -6,6 +6,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -96,6 +97,11 @@ export const agents = pgTable(
     /** The exact Agent Card bytes we published (so we can always re-serve / re-check them). */
     cardJson: text('card_json'),
     cardTx: text('card_tx').unique(),
+    /**
+     * A card update waiting for the company's on-chain approval (e.g. new calling numbers). The live
+     * fields above stay in force until the setAgentURI transaction is confirmed.
+     */
+    pendingCard: jsonb('pending_card').$type<PendingCard>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -110,6 +116,15 @@ export const agents = pgTable(
 );
 
 export type Agent = typeof agents.$inferSelect;
+
+/** A published-but-not-yet-pinned Agent Card (see agents.pendingCard). */
+export interface PendingCard {
+  callingNumbers: string[];
+  agentUri: string;
+  metadataHash: string;
+  cardJson: string;
+  preparedAt: string;
+}
 export type NewAgent = typeof agents.$inferInsert;
 
 /**
