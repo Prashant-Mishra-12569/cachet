@@ -7,14 +7,14 @@
  */
 import { decodePaymentResponseHeader } from '@x402/fetch';
 import { explorerTxUrl } from '@cachet/shared';
-import { fail, loadRootEnv, network, stop } from './env';
+import { fail, loadRootEnv, network, stop, apiBase } from './env';
 import { agentPayingFetch } from './x402-client';
 
 async function main(): Promise<void> {
   loadRootEnv();
   const credits = process.argv[2] ?? '100';
   if (!['1', '10', '100', '1000'].includes(credits)) fail('credits must be 1, 10, 100 or 1000');
-  const api = `http://localhost:${process.env['PORT'] ?? '8787'}`;
+  const api = apiBase();
   const { fetch: payingFetch } = await agentPayingFetch();
 
   console.log(`Buying ${credits} seal credits with x402… (settling on Concordium takes ~10 s)`);

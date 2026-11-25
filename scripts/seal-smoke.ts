@@ -15,7 +15,7 @@ import { loadAccountKey } from '@cachet/concordium';
 import { canonicalize, sealCloseMessage, sealRequestMessage, sha256Hex } from '@cachet/shared/seal';
 import { decodePaymentResponseHeader } from '@x402/fetch';
 import { explorerTxUrl } from '@cachet/shared';
-import { fail, stop, loadRootEnv, network } from './env';
+import { fail, stop, loadRootEnv, network, apiBase } from './env';
 import { agentPayingFetch } from './x402-client';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const keepOpen = args.includes('--keep-open');
   const [badge, to, from = to] = args.filter((a) => !a.startsWith('--'));
   if (!badge || !to) fail('usage: pnpm seal:smoke <badge> <calleeE164> [fromE164] [--keep-open]');
-  const api = `http://localhost:${process.env['PORT'] ?? '8787'}`;
+  const api = apiBase();
   const path = process.env['CCD_AGENT_KEY_PATH'];
   const account = process.env['CCD_AGENT_ADDRESS'];
   if (!path || !account) fail('CCD_AGENT_KEY_PATH and CCD_AGENT_ADDRESS must be set in .env');

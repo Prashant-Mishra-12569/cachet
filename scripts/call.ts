@@ -19,7 +19,7 @@ import {
   closeReasonFor,
   type Execution,
 } from '@cachet/voice';
-import { fail, loadRootEnv, stop } from './env';
+import { fail, loadRootEnv, stop, apiBase } from './env';
 import { bolnaFromEnv } from './voice-setup';
 import { agentPayingFetch } from './x402-client';
 
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   // The agent's key is loaded and checked against CCD_AGENT_ADDRESS inside agentPayingFetch.
   const { fetch: payingFetch, signer, token } = await agentPayingFetch();
   const cachet = createCachetClient({
-    baseUrl: `http://localhost:${process.env['PORT'] ?? '8787'}`,
+    baseUrl: apiBase(),
     badge,
     account: process.env['CCD_AGENT_ADDRESS'] ?? '',
     signer,

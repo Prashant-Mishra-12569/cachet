@@ -10,7 +10,7 @@ import { TransactionHash } from '@concordium/web-sdk';
 import { createGrpcClient, registeredDataOf } from '@cachet/concordium';
 import { explorerTxUrl } from '@cachet/shared';
 import { parseAnchorPayload, verifyMerkleProof } from '@cachet/shared/seal';
-import { fail, stop, loadRootEnv, network, optionalPort } from './env';
+import { fail, stop, loadRootEnv, network, optionalPort, apiBase } from './env';
 
 interface PublicAnchor {
   status: string;
@@ -22,7 +22,7 @@ interface PublicAnchor {
 
 async function main(): Promise<void> {
   loadRootEnv();
-  const [sealId, api = `http://localhost:${process.env['PORT'] ?? '8787'}`] = process.argv.slice(2);
+  const [sealId, api = apiBase()] = process.argv.slice(2);
   if (!sealId) fail('usage: pnpm anchor:verify <sealId> [apiBaseUrl]');
   const net = network();
 

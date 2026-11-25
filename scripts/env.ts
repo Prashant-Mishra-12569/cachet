@@ -9,6 +9,12 @@ export function loadRootEnv(): void {
   if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
 }
 
+/** Cachet API for the command-line tools: CACHET_API_URL (e.g. https://api.getcachet.site) or local. */
+export function apiBase(): string {
+  const url = process.env['CACHET_API_URL']?.trim();
+  return (url || `http://localhost:${process.env['PORT'] ?? '8787'}`).replace(/\/+$/, '');
+}
+
 export function network(): Network {
   const value = process.env['CCD_NETWORK'] ?? 'testnet';
   if (!isNetwork(value)) throw new Error(`CCD_NETWORK must be "testnet" or "mainnet", got "${value}"`);
