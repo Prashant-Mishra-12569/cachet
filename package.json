@@ -32,7 +32,10 @@
     "delivery:bench": "pnpm --filter @cachet/scripts delivery:bench",
     "bot:copy": "pnpm --filter @cachet/server copy:preview",
     "credits:buy": "pnpm --filter @cachet/scripts credits:buy",
-    "x402:check": "pnpm --filter @cachet/scripts x402:check"
+    "x402:check": "pnpm --filter @cachet/scripts x402:check",
+    "voice:setup": "pnpm --filter @cachet/scripts voice:setup",
+    "voice:test": "pnpm --filter @cachet/scripts voice:test",
+    "call": "pnpm --filter @cachet/scripts call"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

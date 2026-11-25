@@ -316,16 +316,33 @@ importers:
         specifier: 0.31.11
         version: 0.31.11
 
+  packages/sdk:
+    dependencies:
+      '@cachet/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@concordium/web-sdk':
+        specifier: 12.0.2
+        version: 12.0.2(@protobuf-ts/runtime-rpc@2.11.1)(cbor2@1.12.0)
+
   packages/shared: {}
+
+  packages/voice: {}
 
   scripts:
     dependencies:
       '@cachet/concordium':
         specifier: workspace:*
         version: link:../packages/concordium
+      '@cachet/sdk':
+        specifier: workspace:*
+        version: link:../packages/sdk
       '@cachet/shared':
         specifier: workspace:*
         version: link:../packages/shared
+      '@cachet/voice':
+        specifier: workspace:*
+        version: link:../packages/voice
       '@concordium/web-sdk':
         specifier: 12.0.2
         version: 12.0.2(@protobuf-ts/runtime-rpc@2.11.1)(cbor2@1.12.0)
