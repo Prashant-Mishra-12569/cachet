@@ -1,42 +1,66 @@
+import { CHECK_PATH, CHECK_WIDTH, LOGO_WIDTH, MARK_PATH, WORD_PATH } from './logo-paths';
+
 /**
- * The Cachet seal: a wax seal (wavy edge) pressed with a check mark.
- * SealMark = flat logo mark. WaxSeal = the glossy emerald object used in the hero.
- * Both are pure SVG (no images, no 3D runtime): crisp at any size and free to load.
+ * The Cachet brand in SVG (no images, no fonts to load): crisp at any size.
+ * SealMark = the seal-shaped "C" with a check (icon). CachetLogo = the seal + "achet" (full logo).
+ * WaxSeal = the glossy emerald seal that stamps the card in the hero.
  */
 
-/** Wavy wax edge: a circle whose radius ripples `waves` times. Deterministic (same on server and client). */
+/** Wavy wax edge, the same rhythm as the logo's seal. Deterministic (same on server and client). */
 function waxEdge(cx: number, cy: number, r: number, amp: number, waves: number): string {
   const pts: string[] = [];
   for (let i = 0; i < 240; i++) {
     const t = (i / 240) * Math.PI * 2;
-    const rr = r + amp * Math.sin(waves * t) + amp * 0.35 * Math.sin((waves * 2 + 1) * t + 1.3);
+    const rr = r + amp * Math.sin(waves * t + (3 * Math.PI) / 2);
     pts.push(`${(cx + rr * Math.cos(t)).toFixed(2)} ${(cy + rr * Math.sin(t)).toFixed(2)}`);
   }
   return `M${pts.join('L')}Z`;
 }
 
-const EDGE_100 = waxEdge(50, 50, 45, 2.2, 11);
-const EDGE_200 = waxEdge(100, 100, 90, 4.2, 11);
-const CHECK_100 = 'M33 51.5 L45 63 L68 38';
+const EDGE_200 = waxEdge(100, 100, 90, 6.3, 10);
 const CHECK_200 = 'M66 103 L90 126 L136 76';
 
+function Mark({ color }: { color: string }) {
+  return (
+    <>
+      <path d={MARK_PATH} fill={color} />
+      <path
+        d={CHECK_PATH}
+        fill="none"
+        stroke={color}
+        strokeWidth={CHECK_WIDTH}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
+}
+
+/** The icon: seal-shaped "C" with a check. Decorative unless `title` is given. */
 export function SealMark({ className, title }: { className?: string; title?: string }) {
   return (
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 220 220"
       className={className}
       role={title ? 'img' : undefined}
       aria-hidden={title ? undefined : true}
     >
       {title ? <title>{title}</title> : null}
-      <path d={EDGE_100} fill="var(--color-seal)" />
-      <circle cx="50" cy="50" r="33" fill="none" stroke="var(--color-gold)" strokeWidth="1.6" opacity="0.9" />
+      <Mark color="var(--color-seal)" />
+    </svg>
+  );
+}
+
+/** The full logo: the seal is the "C" of "Cachet". Size it by height (e.g. className="h-8 w-auto"). */
+export function CachetLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox={`0 0 ${LOGO_WIDTH} 220`} className={className} role="img" aria-label="Cachet">
+      <Mark color="var(--color-seal)" />
       <path
-        d={CHECK_100}
-        fill="none"
-        stroke="#fff"
-        strokeWidth="7.5"
-        strokeLinecap="round"
+        d={WORD_PATH}
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="2.6"
         strokeLinejoin="round"
       />
     </svg>
