@@ -1,4 +1,16 @@
-import { agents, and, arrayOverlaps, eq, ne, sql, type AgentPurpose, type Db } from '@cachet/db';
+import {
+  agents,
+  and,
+  arrayOverlaps,
+  eq,
+  ne,
+  sql,
+  type AgentPurpose,
+  type Db,
+  type PendingCard,
+} from '@cachet/db';
+
+export type { PendingCard };
 
 export type AgentStatus = 'draft' | 'registered' | 'active' | 'revoked';
 
@@ -20,6 +32,8 @@ export interface AgentRecord {
   metadataHash: string | null;
   cardJson: string | null;
   cardTx: string | null;
+  /** A card update (e.g. new calling numbers) waiting for the company's on-chain approval. */
+  pendingCard: PendingCard | null;
   createdAt: Date;
 }
 
@@ -45,6 +59,8 @@ export type AgentPatch = Partial<
     | 'metadataHash'
     | 'cardJson'
     | 'cardTx'
+    | 'callingNumbers'
+    | 'pendingCard'
   >
 >;
 
@@ -171,6 +187,7 @@ export function createMemoryAgentRepo(): AgentRepo & { rows: Map<string, AgentRe
         metadataHash: null,
         cardJson: null,
         cardTx: null,
+        pendingCard: null,
         createdAt: new Date(),
       };
       rows.set(record.id, record);

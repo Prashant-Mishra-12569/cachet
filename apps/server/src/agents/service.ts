@@ -88,6 +88,74 @@ export function createAgentService(deps: AgentServiceDeps) {
     }
   }
 
+  /**
+   * Build the Agent Card (registry badge + Cachet extension) with these calling numbers, publish it,
+   * and make sure the public URL serves exactly those bytes. Returns what must be pinned on chain.
+   */
+  async function publishCard(
+    business: BusinessRecord,
+    agent: AgentRecord,
+    account: string,
+    callingNumbers: string[],
+  ): Promise<{ agentUri: string; metadataHash: string; cardJson: string }> {
+    if (agent.tokenId === null) throw new AgentError('agent_wrong_state', 'no token id');
+    if (!deps.cardHost) throw new AgentError('card_host_unavailable', 'no card host configured');
+    const host = deps.cardHost;
+
+    let slot;
+    try {
+      slot = await host.reserve(`${business.legalName} · ${agent.name}`);
+    } catch (err) {
+      throw new AgentError('card_host_unavailable', err instanceof CardHostError ? err.message : String(err));
+    }
+
+    const registryCard = await deps.gateway.buildCard({
+      name: agent.name,
+      description: agent.description,
+      agentUri: slot.url,
+      ownerAccount: account,
+      tokenId: agent.tokenId,
+      skills: skillsFor(agent.purposes),
+      provider: { organization: business.legalName },
+    });
+    const { cardJson, metadataHash } = withCachetExtension(registryCard, {
+      version: 1,
+      company: {
+        legalName: business.legalName,
+        legalCountry: business.legalCountry,
+        issuer: business.issuer,
+        proofTx: business.proofTx,
+      },
+      purposes: agent.purposes,
+      language: agent.language,
+      callingNumbers,
+      agentAccount: `${caip2}:${agent.agentAccount}`,
+      neverCalls: business.neverCalls,
+    });
+
+    try {
+      await slot.write(cardJson);
+    } catch (err) {
+      throw new AgentError('card_host_unavailable', err instanceof Error ? err.message : String(err));
+    }
+
+    // Hash what the public URL ACTUALLY serves, not what we think we wrote.
+    const deadline = Date.now() + (deps.servedTimeoutMs ?? 60_000);
+    let lastSeen: string;
+    for (;;) {
+      try {
+        lastSeen = sha256Hex(await host.fetchServed(slot.url));
+        if (lastSeen === metadataHash) break;
+      } catch (err) {
+        lastSeen = err instanceof Error ? err.message : String(err);
+      }
+      if (Date.now() > deadline)
+        throw new AgentError('card_not_served', `served ${lastSeen}, want ${metadataHash}`);
+      await sleep(2_000);
+    }
+    return { agentUri: slot.url, metadataHash, cardJson };
+  }
+
   return {
     async list(account: string) {
       const business = await businessOf(account);
@@ -145,69 +213,62 @@ export function createAgentService(deps: AgentServiceDeps) {
       const { business, agent } = await agentOf(account, agentId);
       expect(agent, 'registered');
       if (agent.tokenId === null) throw new AgentError('agent_wrong_state', 'no token id');
-      if (!deps.cardHost) throw new AgentError('card_host_unavailable', 'no card host configured');
-
-      let slot;
-      try {
-        slot = await deps.cardHost.reserve(`${business.legalName} · ${agent.name}`);
-      } catch (err) {
-        throw new AgentError(
-          'card_host_unavailable',
-          err instanceof CardHostError ? err.message : String(err),
-        );
-      }
-
-      const registryCard = await deps.gateway.buildCard({
-        name: agent.name,
-        description: agent.description,
-        agentUri: slot.url,
-        ownerAccount: account,
-        tokenId: agent.tokenId,
-        skills: skillsFor(agent.purposes),
-        provider: { organization: business.legalName },
-      });
-      const { cardJson, metadataHash } = withCachetExtension(registryCard, {
-        version: 1,
-        company: {
-          legalName: business.legalName,
-          legalCountry: business.legalCountry,
-          issuer: business.issuer,
-          proofTx: business.proofTx,
-        },
-        purposes: agent.purposes,
-        language: agent.language,
-        callingNumbers: agent.callingNumbers,
-        agentAccount: `${caip2}:${agent.agentAccount}`,
-        neverCalls: business.neverCalls,
-      });
-
-      try {
-        await slot.write(cardJson);
-      } catch (err) {
-        throw new AgentError('card_host_unavailable', err instanceof Error ? err.message : String(err));
-      }
-
-      // Hash what the public URL ACTUALLY serves, not what we think we wrote.
-      const deadline = Date.now() + (deps.servedTimeoutMs ?? 60_000);
-      let lastSeen: string;
-      for (;;) {
-        try {
-          lastSeen = sha256Hex(await deps.cardHost.fetchServed(slot.url));
-          if (lastSeen === metadataHash) break;
-        } catch (err) {
-          lastSeen = err instanceof Error ? err.message : String(err);
-        }
-        if (Date.now() > deadline)
-          throw new AgentError('card_not_served', `served ${lastSeen}, want ${metadataHash}`);
-        await sleep(2_000);
-      }
-
-      const updated = await transition(agent, { agentUri: slot.url, metadataHash, cardJson });
+      const card = await publishCard(business, agent, account, agent.callingNumbers);
+      const updated = await transition(agent, card);
       const walletTx = await deps.gateway.toWalletTx(
-        await deps.gateway.buildSetAgentUri(agent.tokenId, slot.url, metadataHash, account),
+        await deps.gateway.buildSetAgentUri(agent.tokenId, card.agentUri, card.metadataHash, account),
         account,
       );
       return { agent: updated, walletTx };
+    },
+
+    /**
+     * Change an ACTIVE AI caller's calling numbers. A new card is published and STAGED; the live card
+     * (and every seal check) stays as it is until the company pins the new card on chain.
+     */
+    async prepareNumbersUpdate(account: string, agentId: string, callingNumbers: string[]) {
+      const { business, agent } = await agentOf(account, agentId);
+      expect(agent, 'active');
+      if (agent.tokenId === null) throw new AgentError('agent_wrong_state', 'no token id');
+      const numbers = [...new Set(callingNumbers)];
+      const taken = (await deps.agents.numbersInUse(numbers)).filter(
+        (n) => !agent.callingNumbers.includes(n),
+      );
+      if (taken.length > 0) throw new AgentError('number_in_use', taken.join(', '));
+      const card = await publishCard(business, agent, account, numbers);
+      const updated = await transition(agent, {
+        pendingCard: { ...card, callingNumbers: numbers, preparedAt: new Date().toISOString() },
+      });
+      const walletTx = await deps.gateway.toWalletTx(
+        await deps.gateway.buildSetAgentUri(agent.tokenId, card.agentUri, card.metadataHash, account),
+        account,
+      );
+      return { agent: updated, walletTx };
+    },
+
+    /** The company pinned the staged card on chain: only now do the new numbers take effect. */
+    async confirmNumbersUpdate(account: string, agentId: string, txHash: string) {
+      const { agent } = await agentOf(account, agentId);
+      expect(agent, 'active');
+      const pending = agent.pendingCard;
+      if (agent.tokenId === null || !pending) throw new AgentError('agent_wrong_state', 'no update prepared');
+      const tx = await deps.gateway.confirm(txHash, account, SET_URI);
+      const pinned = tx.events.find(
+        (e) =>
+          e.type === 'URIUpdated' &&
+          e.tokenId === agent.tokenId &&
+          e.agentUri === pending.agentUri &&
+          e.metadataHash === pending.metadataHash,
+      );
+      if (!pinned) throw new AgentError('tx_mismatch', 'no URIUpdated event with the prepared URL and hash');
+      return transition(agent, {
+        callingNumbers: pending.callingNumbers,
+        agentUri: pending.agentUri,
+        metadataHash: pending.metadataHash,
+        cardJson: pending.cardJson,
+        cardTx: tx.txHash,
+        pendingCard: null,
+      });
     },
 
     /** Step 4b: check the setAgentURI transaction pinned exactly our URL + hash; the agent is now active. */

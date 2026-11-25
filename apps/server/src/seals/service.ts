@@ -371,6 +371,7 @@ export function createSealService(deps: SealServiceDeps) {
 
       return {
         sealId: id,
+        company: business.legalName,
         code: formatCode(code),
         spokenCode: spokenCode(code),
         firstLine: `Hi, this is ${business.legalName}'s AI assistant. Your Cachet code is ${spokenCode(code)}.`,

@@ -57,8 +57,14 @@ export function agentView(a: AgentRecord, network: Network, registryUrl: string)
     metadataHash: a.metadataHash,
     registerTxUrl: a.registerTx ? explorerTxUrl(network, a.registerTx) : null,
     cardTxUrl: a.cardTx ? explorerTxUrl(network, a.cardTx) : null,
+    /** Numbers waiting for the company's on-chain approval (not in force yet). */
+    pendingCallingNumbers: a.pendingCard?.callingNumbers ?? null,
   };
 }
+
+const NumbersBody = z.object({
+  callingNumbers: z.array(z.string().trim().regex(E164, 'must be E.164, e.g. +31201234567')).min(1).max(10),
+});
 
 export function agentRoutes(deps: AgentRouteDeps) {
   const app = new Hono<SessionEnv>();
@@ -146,6 +152,33 @@ export function agentRoutes(deps: AgentRouteDeps) {
       const body = TxBody.safeParse(await c.req.json().catch(() => null));
       if (!body.success) return apiError(c, 'invalid_request');
       const agent = await deps.agents.confirmCard(
+        c.var.account,
+        idOf(c.req.param('id')),
+        body.data.txHash.toLowerCase(),
+      );
+      return c.json({ agent: view(agent) });
+    }),
+  );
+
+  // Change an active AI caller's calling numbers: publish + stage a new card, then the company pins it.
+  app.post('/:id/numbers/prepare', perAccount('agent-card', 5), (c) =>
+    handle(c, async () => {
+      const body = NumbersBody.safeParse(await c.req.json().catch(() => null));
+      if (!body.success) return apiError(c, 'invalid_request');
+      const { agent, walletTx } = await deps.agents.prepareNumbersUpdate(
+        c.var.account,
+        idOf(c.req.param('id')),
+        body.data.callingNumbers,
+      );
+      return c.json({ agent: view(agent), walletTx });
+    }),
+  );
+
+  app.post('/:id/numbers/confirm', (c) =>
+    handle(c, async () => {
+      const body = TxBody.safeParse(await c.req.json().catch(() => null));
+      if (!body.success) return apiError(c, 'invalid_request');
+      const agent = await deps.agents.confirmNumbersUpdate(
         c.var.account,
         idOf(c.req.param('id')),
         body.data.txHash.toLowerCase(),
