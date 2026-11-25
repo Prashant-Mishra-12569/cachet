@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { BOT_USERNAME, loadTelegram, type TelegramWebApp } from '@/lib/telegram';
+import { CachetLogo } from '@/components/brand/Seal';
 
 type Shell =
   { state: 'loading' } | { state: 'outside' } | { state: 'ready'; tg: TelegramWebApp; initData: string };
@@ -79,7 +80,7 @@ export function TelegramShell({ children }: { children: ReactNode }) {
 function Outside() {
   return (
     <section className="tg-card mt-10 text-center">
-      <p className="font-serif text-3xl italic">Cachet</p>
+      <CachetLogo className="mx-auto h-10 w-auto" />
       <h1 className="mt-4 text-lg font-semibold">Open this inside Telegram</h1>
       <p className="mt-2 text-sm text-ink-2">
         These screens only work from the Cachet bot, so we know they are really yours.

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { LocalTime } from '@/components/LocalTime';
 import { countryName } from '@/lib/format';
 import { getPublicSeal, type PublicSeal } from '@/lib/server-api';
+import { CachetLogo } from '@/components/brand/Seal';
 
 type Props = { params: Promise<{ sealId: string }> };
 
@@ -61,8 +62,8 @@ export default async function SealPage({ params }: Props) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-5 px-4 py-8 sm:py-14">
       <header className="flex items-center justify-between">
-        <Link href="/" className="font-serif text-2xl italic">
-          Cachet
+        <Link href="/" aria-label="Cachet home" className="inline-flex min-h-11 items-center">
+          <CachetLogo className="h-8 w-auto" />
         </Link>
         <span className="rounded-full border border-line px-3 py-1 text-xs text-ink-2">Testnet</span>
       </header>

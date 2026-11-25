@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { LocalTime } from '@/components/LocalTime';
 import { ErrorCard, Skeleton, useTgData } from '@/components/tg/TelegramShell';
 import { PURPOSES, STATUS_WORDS, money, type TgHome } from '@/lib/tg-types';
+import { CachetLogo } from '@/components/brand/Seal';
 
 /** Mini App home: "is a verified call happening now?" + my recent sealed calls + family. */
 export default function TelegramHome() {
@@ -16,7 +17,7 @@ export default function TelegramHome() {
   return (
     <>
       <header className="flex items-center justify-between">
-        <span className="font-serif text-2xl italic">Cachet</span>
+        <CachetLogo className="h-8 w-auto" />
         <span className="rounded-full border border-line px-3 py-1 text-xs text-ink-2">Testnet</span>
       </header>
 
