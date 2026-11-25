@@ -40,12 +40,19 @@ export const callIsOver = (status: string) => ENDED.has(status);
 /** Cachet's seal close reasons (POST /v1/seals/:id/close). */
 export type CloseReason = 'completed' | 'no_answer' | 'failed' | 'cancelled';
 
-export function closeReasonFor(e: Pick<Execution, 'status' | 'durationSeconds'>): CloseReason {
+/**
+ * Why the call ended, for the seal's ledger. `answered`: we saw the call "in-progress" while polling.
+ * Careful: at "call-disconnected" Bolna has NOT filled in the duration yet (seen live: a 63 s answered
+ * call still showed 0), so the duration alone can't tell "answered" from "no answer".
+ */
+export function closeReasonFor(
+  e: Pick<Execution, 'status' | 'durationSeconds'> & { answered?: boolean },
+): CloseReason {
   switch (e.status) {
     case 'completed':
       return 'completed';
     case 'call-disconnected':
-      return (e.durationSeconds ?? 0) > 0 ? 'completed' : 'no_answer';
+      return e.answered || (e.durationSeconds ?? 0) > 0 ? 'completed' : 'no_answer';
     case 'no-answer':
     case 'busy':
       return 'no_answer';
@@ -167,13 +174,18 @@ export function createBolna(options: BolnaOptions) {
 
     getExecution,
 
-    /** Poll until the phone call is over (or the timeout). Calls `onStatus` when the status changes. */
+    /**
+     * Poll until the phone call is over (or the timeout). Calls `onStatus` when the status changes.
+     * `answered` = the call was seen "in-progress". If it ended without us seeing that, we wait a few
+     * seconds for Bolna's final status (no-answer / busy / completed) instead of guessing.
+     */
     async waitUntilOver(
       id: string,
       opts: { pollMs?: number; timeoutMs?: number; onStatus?: (e: Execution) => void } = {},
-    ): Promise<Execution> {
+    ): Promise<Execution & { answered: boolean }> {
       const deadline = Date.now() + (opts.timeoutMs ?? 6 * 60_000);
       let last = '';
+      let answered = false;
       for (;;) {
         let e: Execution | null = null;
         try {
@@ -183,11 +195,24 @@ export function createBolna(options: BolnaOptions) {
           if (!(err instanceof BolnaError) || err.status < 500) throw err;
         }
         if (e) {
+          if (e.status === 'in-progress') answered = true;
           if (e.status !== last) {
             last = e.status;
             opts.onStatus?.(e);
           }
-          if (callIsOver(e.status)) return e;
+          if (callIsOver(e.status)) {
+            if (e.status !== 'call-disconnected' || answered) return { ...e, answered };
+            // Ended, but we never saw it answered: wait briefly for the final status.
+            for (let i = 0; i < 5; i++) {
+              await sleep(opts.pollMs ?? 2_000);
+              const final = await getExecution(id).catch(() => null);
+              if (final && final.status !== 'call-disconnected') {
+                const wasAnswered = (final.durationSeconds ?? 0) > 0 || final.status === 'completed';
+                return { ...final, answered: wasAnswered };
+              }
+            }
+            return { ...e, answered };
+          }
         }
         if (Date.now() > deadline) throw new BolnaError(504, `call ${id} not over after the timeout`);
         await sleep(opts.pollMs ?? 2_000);

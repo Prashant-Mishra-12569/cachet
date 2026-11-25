@@ -73,6 +73,35 @@ describe('Bolna client', () => {
     expect(closeReasonFor(e)).toBe('completed');
   });
 
+  it('an answered call is "completed" even though Bolna reports 0 s at disconnect (seen live)', async () => {
+    const api = fakeApi({
+      '/executions/ex-2': [
+        { status: 200, body: { id: 'ex-2', status: 'ringing' } },
+        { status: 200, body: { id: 'ex-2', status: 'in-progress' } },
+        { status: 200, body: { id: 'ex-2', status: 'call-disconnected', conversation_duration: 0 } },
+      ],
+    });
+    const bolna = createBolna({ apiKey: KEY, fetch: api.fetch, sleep: async () => undefined });
+    const e = await bolna.waitUntilOver('ex-2');
+    expect(e.answered).toBe(true);
+    expect(closeReasonFor(e)).toBe('completed');
+  });
+
+  it('ended without being seen answered: waits for the final status instead of guessing', async () => {
+    const api = fakeApi({
+      '/executions/ex-3': [
+        { status: 200, body: { id: 'ex-3', status: 'ringing' } },
+        { status: 200, body: { id: 'ex-3', status: 'call-disconnected', conversation_duration: 0 } },
+        { status: 200, body: { id: 'ex-3', status: 'call-disconnected' } },
+        { status: 200, body: { id: 'ex-3', status: 'no-answer' } },
+      ],
+    });
+    const bolna = createBolna({ apiKey: KEY, fetch: api.fetch, sleep: async () => undefined });
+    const e = await bolna.waitUntilOver('ex-3');
+    expect(e.status).toBe('no-answer');
+    expect(closeReasonFor(e)).toBe('no_answer');
+  });
+
   it('a client error while waiting stops (no endless loop)', async () => {
     const api = fakeApi({ '/executions/x': [{ status: 404, body: { message: 'no such call' } }] });
     const bolna = createBolna({ apiKey: KEY, fetch: api.fetch, sleep: async () => undefined });
