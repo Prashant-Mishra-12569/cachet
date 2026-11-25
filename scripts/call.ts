@@ -12,7 +12,13 @@
  * for the AI caller), CACHET_AGENT_BADGE, CCD_AGENT_KEY_PATH, CCD_AGENT_ADDRESS.
  */
 import { createCachetClient, type CloseReason } from '@cachet/sdk';
-import { NORTHWIND_AGENT, SCAM_AGENT, agentIdByName, closeReasonFor, type Execution } from '@cachet/voice';
+import {
+  NORTHWIND_AGENT,
+  UNVERIFIED_AGENT,
+  agentIdByName,
+  closeReasonFor,
+  type Execution,
+} from '@cachet/voice';
 import { fail, loadRootEnv, stop } from './env';
 import { bolnaFromEnv } from './voice-setup';
 import { agentPayingFetch } from './x402-client';
@@ -33,13 +39,14 @@ async function main(): Promise<void> {
   const log = (e: Execution) => console.log(`  ${since(started).padStart(7)}  call: ${e.status}`);
 
   if (process.argv.includes('--scam')) {
-    const scamId = await agentIdByName(bolna, SCAM_AGENT.name);
+    const scamId = await agentIdByName(bolna, UNVERIFIED_AGENT.name);
     if (!scamId) fail('Run "pnpm voice:setup" first.');
-    console.log('SCAM SCENE (demo): a caller pretending to be a bank, WITHOUT a Cachet seal.');
+    console.log('SCAM SCENE (demo): "Saffron Trust Bank" (fictional) calls WITHOUT a Cachet seal.');
+    console.log('  Never say a real code on this call: the AI stops and reveals the demo if you do.');
     console.log('  → No green card will arrive. Ask the bot /check during the call: it says NOT verified.\n');
     const id = await bolna.startCall({ agentId: scamId, to, userData: {} });
     const end = await bolna.waitUntilOver(id, { onStatus: log });
-    console.log(`\nScam call over: ${end.status}.`);
+    console.log(`\nUnsealed call over: ${end.status}. No seal was ever issued for it.`);
     return;
   }
 
@@ -124,8 +131,12 @@ async function main(): Promise<void> {
   await close(closeReasonFor(end));
 
   // Honest caller ID: the number the person saw must be the one the seal promised.
-  await new Promise((r) => setTimeout(r, 8000));
-  const full = await bolna.getExecution(executionId);
+  // Bolna fills in the final record (duration, caller ID) a little after the line drops: wait for it.
+  let full = await bolna.getExecution(executionId);
+  for (let i = 0; i < 15 && (full.status === 'call-disconnected' || !full.fromNumber); i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    full = await bolna.getExecution(executionId);
+  }
   console.log(`\nCall: ${full.status} (${full.terminationReason ?? '?'}), ${full.durationSeconds ?? '?'} s`);
   if (full.fromNumber && full.fromNumber !== callerId) {
     console.warn(

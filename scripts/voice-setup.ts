@@ -4,7 +4,7 @@
  *
  *   pnpm voice:setup
  */
-import { LINE_TEST_AGENT, NORTHWIND_AGENT, SCAM_AGENT, createBolna, ensureAgent } from '@cachet/voice';
+import { LINE_TEST_AGENT, NORTHWIND_AGENT, UNVERIFIED_AGENT, createBolna, ensureAgent } from '@cachet/voice';
 import { fail, loadRootEnv, stop } from './env';
 
 export function bolnaFromEnv() {
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   const bolna = bolnaFromEnv();
   const me = await bolna.me();
   console.log(`Bolna account: wallet ${me.wallet}, up to ${me.concurrency.max} calls at once`);
-  for (const def of [LINE_TEST_AGENT, NORTHWIND_AGENT, SCAM_AGENT]) {
+  for (const def of [LINE_TEST_AGENT, NORTHWIND_AGENT, UNVERIFIED_AGENT]) {
     const { id, created } = await ensureAgent(bolna, def);
     console.log(`✓ ${created ? 'created' : 'updated'}: ${def.name} (${id})`);
   }
