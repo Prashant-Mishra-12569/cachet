@@ -10,7 +10,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "node scripts/dev-ports.mjs check && turbo run dev",
+    "dev": "node scripts/dev-ports.mjs check && turbo run dev --env-mode=loose",
     "dev:stop": "node scripts/dev-ports.mjs stop",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
@@ -30,7 +30,9 @@
     "seal:smoke": "pnpm --filter @cachet/scripts seal:smoke",
     "anchor:verify": "pnpm --filter @cachet/scripts anchor:verify",
     "delivery:bench": "pnpm --filter @cachet/scripts delivery:bench",
-    "bot:copy": "pnpm --filter @cachet/server copy:preview"
+    "bot:copy": "pnpm --filter @cachet/server copy:preview",
+    "credits:buy": "pnpm --filter @cachet/scripts credits:buy",
+    "x402:check": "pnpm --filter @cachet/scripts x402:check"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

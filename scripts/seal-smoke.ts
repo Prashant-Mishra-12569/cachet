@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { signMessage } from '@concordium/web-sdk';
 import { loadAccountKey } from '@cachet/concordium';
 import { canonicalize, sealCloseMessage, sealRequestMessage, sha256Hex } from '@cachet/shared/seal';
+import { decodePaymentResponseHeader } from '@x402/fetch';
+import { explorerTxUrl } from '@cachet/shared';
 import { fail, stop, loadRootEnv, network } from './env';
+import { agentPayingFetch } from './x402-client';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -64,9 +67,24 @@ async function main(): Promise<void> {
     },
     sealRequestMessage,
   );
+  // Like the real SDK: if the AI caller has no seal credits left, the server answers 402 (x402) and
+  // this fetch pays €0.01 for this one seal by itself, then sends the same request again.
+  const { fetch: payingFetch } = await agentPayingFetch();
   const started = Date.now();
-  const issued = await post('/v1/seals', sealBody);
+  const issuedRes = await payingFetch(`${api}/v1/seals`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(sealBody),
+  });
+  const issued = { res: issuedRes, json: (await issuedRes.json()) as Record<string, unknown> };
   const ms = Date.now() - started;
+  const x402Receipt = issuedRes.headers.get('PAYMENT-RESPONSE');
+  if (x402Receipt) {
+    const settled = decodePaymentResponseHeader(x402Receipt);
+    console.log(
+      `✓ no credits left: paid this seal with x402 → ${explorerTxUrl(network(), settled.transaction)}`,
+    );
+  }
   if (issued.res.status !== 201) {
     const code = (issued.json['error'] as { code?: string } | undefined)?.code;
     const hint =
