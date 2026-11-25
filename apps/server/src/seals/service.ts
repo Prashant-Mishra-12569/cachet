@@ -254,6 +254,24 @@ export function createSealService(deps: SealServiceDeps) {
       return active.length;
     },
 
+    /**
+     * Cheap checks before asking an AI caller to PAY for a seal (x402): fresh, not replayed, really
+     * signed by that account. Read-only: the nonce is NOT used up, so the paid retry still works.
+     */
+    async precheck(request: SealRequest, signature: AccountTransactionSignature) {
+      const nowS = Math.floor(nowMs() / 1000);
+      if (Math.abs(nowS - request.ts) > skew) throw new SealError('seal_stale');
+      if (await deps.kv.get(`seal:nonce:${request.agentAccount}:${request.nonce}`)) {
+        throw new SealError('seal_replay');
+      }
+      const check = await deps.verifyMessage(
+        request.agentAccount,
+        sealRequestMessage(sha256Hex(canonicalize(request))),
+        signature,
+      );
+      if (!check.ok) throw new SealError('seal_bad_signature', check.reason);
+    },
+
     async issue(request: SealRequest, signature: AccountTransactionSignature) {
       const agent = await deps.agents.findByBadge(request.badge);
       // Cheap checks on our own data first, then the signature, then the chain.

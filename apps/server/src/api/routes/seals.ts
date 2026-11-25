@@ -4,10 +4,14 @@ import { z } from 'zod';
 import { parseAccountSignature } from '@cachet/concordium';
 import { explorerTxUrl, type Network } from '@cachet/shared';
 import { publicJwk, ULID_FORMAT, type SealSigningKey } from '@cachet/shared/seal';
+import type { AgentRepo } from '../../agents/repo';
 import type { KvStore } from '../../infra/kv';
+import type { SealRepo } from '../../seals/repo';
 import { SealError, type SealService } from '../../seals/service';
+import type { SealBilling } from '../../x402/billing';
 import { apiError } from '../errors';
 import { rateLimit } from '../middleware';
+import { PAYMENT_RESPONSE, PAYMENT_SIGNATURE, billingFail, paymentRequired } from './credits';
 
 export interface SealRouteDeps {
   kv: KvStore;
@@ -15,6 +19,14 @@ export interface SealRouteDeps {
   signingKey: SealSigningKey;
   network: Network;
   trustProxy: boolean;
+  /** x402 per-seal payment when an AI caller has no credits left. */
+  billing?:
+    | {
+        billing: SealBilling;
+        agents: Pick<AgentRepo, 'findByBadge'>;
+        credits: Pick<SealRepo, 'creditBalance'>;
+      }
+    | undefined;
 }
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
@@ -83,6 +95,38 @@ export function sealRoutes(deps: SealRouteDeps) {
     async (c) => {
       const body = await parse(c, SealRequestSchema);
       if (!body) return apiError(c, 'invalid_request');
+      // Every seal is prepaid via x402 (plan §13.1). An AI caller with no credits gets the x402 terms
+      // for ONE seal; its x402 client pays and sends the same request again. This happens BEFORE the
+      // seal service runs, so the request's one-time nonce is still unused for the paid retry.
+      if (deps.billing) {
+        const agent = await deps.billing.agents.findByBadge(body.request.badge);
+        if (agent && agent.status === 'active' && agent.agentAccount === body.request.agentAccount) {
+          const header = c.req.header(PAYMENT_SIGNATURE);
+          const mustPay = Boolean(header) || (await deps.billing.credits.creditBalance(agent.id)) === 0;
+          if (mustPay) {
+            // Only a fresh, unused, genuinely signed request may be asked to pay (or be paid for).
+            try {
+              await deps.seals.precheck(body.request, body.signature);
+            } catch (err) {
+              return fail(c, err);
+            }
+          }
+          try {
+            if (header) {
+              const bought = await deps.billing.billing.purchase({
+                header,
+                credits: 1,
+                expectedAgent: agent,
+              });
+              c.header(PAYMENT_RESPONSE, bought.responseHeader);
+            } else if (mustPay) {
+              return await paymentRequired(c, deps.billing.billing, 1, 'One sealed AI call');
+            }
+          } catch (err) {
+            return billingFail(c, err);
+          }
+        }
+      }
       try {
         return c.json(await deps.seals.issue(body.request, body.signature), 201);
       } catch (err) {

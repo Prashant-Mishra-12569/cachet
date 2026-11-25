@@ -122,13 +122,112 @@ export async function finalizedSummary(
   }
 }
 
+/** Retry a node call when the (public) node says "too many requests" or is briefly unavailable. */
+export async function withRetry<T>(call: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await call();
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      if (i >= attempts || !/429|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(text)) throw err;
+      await new Promise((r) => setTimeout(r, 400 * 2 ** i)); // 0.8 s, 1.6 s, 3.2 s
+    }
+  }
+}
+
+/** Does this finalized transaction (by hash) pay exactly this? Null if not found/finalized yet. */
+export async function transferMatches(
+  client: ConcordiumGRPCClient,
+  txHash: string,
+  s: Omit<TransferSearch, 'since' | 'maxBlocks'>,
+): Promise<boolean | null> {
+  let status;
+  try {
+    status = await withRetry(() => client.getBlockItemStatus(TransactionHash.fromHexString(txHash)));
+  } catch {
+    return null; // unknown to the node (yet)
+  }
+  if (status.status !== 'finalized') return null;
+  const summary = toPlainJson(status.outcome.summary) as Record<string, unknown>;
+  return (
+    summary['sender'] === s.sender &&
+    checkPayment(summary, {
+      tokenId: s.tokenId,
+      recipient: s.recipient,
+      amountRaw: s.amountRaw,
+      decimals: s.decimals,
+      memo: null,
+    }).ok
+  );
+}
+
+export interface TransferSearch {
+  sender: string;
+  recipient: string;
+  tokenId: string;
+  amountRaw: bigint;
+  decimals: number;
+  /** Only look at blocks made at or after this time. */
+  since: Date;
+  /** Safety limit on blocks scanned (testnet makes a block every few seconds). */
+  maxBlocks?: number;
+}
+
+/**
+ * Finalized token transfers that match EXACTLY (sender, recipient, token, amount), newest first.
+ * Used when a facilitator reports a settlement as failed: settlement can succeed on chain even when
+ * the facilitator's answer says otherwise, so the chain is the source of truth.
+ */
+export async function findTokenTransfers(client: ConcordiumGRPCClient, s: TransferSearch): Promise<string[]> {
+  const found: string[] = [];
+  const BATCH = 4n; // blocks read in parallel (the public node answers 429 to bigger bursts)
+  const maxBlocks = BigInt(s.maxBlocks ?? 300);
+  const top = (await client.getConsensusStatus()).lastFinalizedBlockHeight;
+  const bottom = top - maxBlocks + 1n > 0n ? top - maxBlocks + 1n : 0n;
+
+  async function scan(height: bigint): Promise<'older' | 'ok'> {
+    const [hash] = await withRetry(() => client.getBlocksAtHeight(height));
+    if (!hash) return 'ok';
+    const info = await withRetry(() => client.getBlockInfo(hash));
+    if (info.blockSlotTime < s.since) return 'older';
+    if (info.transactionCount === 0n) return 'ok';
+    const items = await withRetry(async () => {
+      const list: unknown[] = [];
+      for await (const item of client.getBlockTransactionEvents(hash)) list.push(item);
+      return list;
+    });
+    for (const item of items) {
+      const summary = toPlainJson(item) as Record<string, unknown>;
+      if (summary['type'] !== 'accountTransaction' || summary['sender'] !== s.sender) continue;
+      const check = checkPayment(summary, {
+        tokenId: s.tokenId,
+        recipient: s.recipient,
+        amountRaw: s.amountRaw,
+        decimals: s.decimals,
+        memo: null,
+      });
+      if (check.ok && typeof summary['hash'] === 'string') found.push(summary['hash']);
+    }
+    return 'ok';
+  }
+
+  for (let high = top; high >= bottom; high -= BATCH) {
+    const heights: bigint[] = [];
+    for (let h = high; h > high - BATCH && h >= bottom; h--) heights.push(h);
+    const results = await Promise.all(heights.map(scan));
+    if (results.includes('older')) break; // reached blocks made before `since`
+  }
+  return found;
+}
+
 export interface ExpectedPayment {
   tokenId: string;
   recipient: string;
   /** Raw units (see decimalToRaw). */
   amountRaw: bigint;
   decimals: number;
-  memo: string;
+  /** Required memo text; null = no memo check (x402 transfers carry no memo). */
+  memo: string | null;
 }
 
 export type PaymentCheck =
@@ -143,7 +242,7 @@ export function checkPayment(summary: Record<string, unknown>, expected: Expecte
   if (summary['type'] !== 'accountTransaction') return { ok: false, reason: 'not_account_transaction' };
   if (summary['transactionType'] === 'failed') return { ok: false, reason: 'failed' };
   if (summary['transactionType'] !== 'tokenUpdate') return { ok: false, reason: 'not_token_update' };
-  const memo = memoHex(expected.memo);
+  const memo = expected.memo === null ? null : memoHex(expected.memo);
   const events = Array.isArray(summary['events']) ? (summary['events'] as Record<string, unknown>[]) : [];
   const match = events.find((e) => {
     const to = e['to'] as { type?: string; address?: string } | null;
@@ -155,8 +254,7 @@ export function checkPayment(summary: Record<string, unknown>, expected: Expecte
       to.address === expected.recipient &&
       amount?.decimals === expected.decimals &&
       amount.value === expected.amountRaw.toString() &&
-      typeof e['memo'] === 'string' &&
-      e['memo'].toLowerCase() === memo
+      (memo === null || (typeof e['memo'] === 'string' && e['memo'].toLowerCase() === memo))
     );
   });
   if (!match) return { ok: false, reason: 'no_matching_transfer' };

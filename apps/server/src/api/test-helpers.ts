@@ -11,6 +11,7 @@ import { createMemoryPeopleRepo } from '../bot/people-repo';
 import { webAppSecret } from '../miniapp/init-data';
 import { createMemoryPaymentsRepo } from '../pay/repo';
 import { createPayService } from '../pay/service';
+import { createSealBilling } from '../x402/billing';
 import { createMemorySealRepo } from '../seals/repo';
 import { createSealService } from '../seals/service';
 import { createCompanyProofService } from '../business/company-proof';
@@ -28,6 +29,10 @@ export const SIGNATURE = { 0: { 0: 'ab'.repeat(64) } };
 export const CRED_ID = 'a1'.repeat(48);
 export const REQUEST_TX = 'bd45a8d18ff67eba0e018bdd370f55ed6c317cc2a6e0098f29b69881d416096c';
 export const AUDIT_TX = 'cc'.repeat(32);
+/** x402 test constants: testnet CAIP-2, Cachet's treasury (payTo) and the facilitator's fee payer. */
+export const X402_NETWORK = 'ccd:4221332d34e1694168c2a0c0b3fd0f27' as const;
+export const TREASURY = '4Pqc9r24AC4Zv1VK4MFREjJY41hENguz8jFZmguZK5f6m7FNBP';
+export const FEE_PAYER = '35sHhKYuw7zk3iKZZjysLEh8BarcwxAJ4pQcZVB8kT9i4pkB5z';
 /** The Mini App HMAC key for the fake bot token used in tests. */
 export const TG_SECRET = webAppSecret('123456:TEST-BOT-TOKEN');
 
@@ -198,6 +203,58 @@ export function makeTestApp(
       finalizedSummary: async (txHash) => payChain.summaries.get(txHash) ?? null,
     },
   });
+  /** Fake x402 facilitator: decides verify/settle outcomes and records the calls, in order. */
+  const x402 = {
+    payer: '33Rcud5xa7UZT3JQawDw9rhp5X14H8MPmfGR9E1uHQ59mr1jVq', // the test AI caller's account
+    valid: true,
+    settleOk: true,
+    tx: 'cd'.repeat(32),
+    /** Hash a failing facilitator still reports ('' = none). */
+    failTx: '',
+    /** settle throws (e.g. timeout) instead of answering. */
+    settleThrows: false,
+    /** Matching finalized transfers "on chain" (the safety net's view). */
+    onChain: [] as string[],
+    calls: [] as { op: 'verify' | 'settle'; amount: string; payTo: string }[],
+  };
+  const billing = createSealBilling({
+    facilitator: {
+      getSupported: async () => ({
+        kinds: [{ x402Version: 2, scheme: 'exact', network: X402_NETWORK, extra: { feePayer: FEE_PAYER } }],
+        extensions: [],
+        signers: {},
+      }),
+      async verify(_payload, req) {
+        x402.calls.push({ op: 'verify', amount: req.amount, payTo: req.payTo });
+        return x402.valid
+          ? { isValid: true, payer: x402.payer }
+          : { isValid: false, invalidReason: 'amount_mismatch' };
+      },
+      async settle(_payload, req) {
+        x402.calls.push({ op: 'settle', amount: req.amount, payTo: req.payTo });
+        if (x402.settleThrows) throw new Error('facilitator timeout');
+        return x402.settleOk
+          ? { success: true, transaction: x402.tx, network: X402_NETWORK, payer: x402.payer }
+          : {
+              success: false,
+              errorReason: 'finalization_failed: transaction not found.',
+              transaction: x402.failTx,
+              network: X402_NETWORK,
+            };
+      },
+    },
+    network: X402_NETWORK,
+    payTo: TREASURY,
+    asset: 'EUDemo',
+    decimals: 6,
+    sealPrice: '0.01',
+    agents: agentRepo,
+    seals: sealRepo,
+    findTransfers: async () => [...x402.onChain],
+    confirmTransfer: async (hash) => (x402.onChain.includes(hash) ? true : null),
+    now,
+    sleep: async () => undefined,
+  });
   const app = createApp({
     network: 'testnet',
     version: 'test',
@@ -212,10 +269,12 @@ export function makeTestApp(
     webOrigin: WEB_ORIGIN,
     secureCookies: false,
     trustProxy: false,
+    x402: { billing, agents: agentRepo, credits: sealRepo },
     miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, pay, now },
   });
   return {
     app,
+    x402,
     payChain,
     paymentsRepo,
     people,

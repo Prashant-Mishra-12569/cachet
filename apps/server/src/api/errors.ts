@@ -117,6 +117,30 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     status: 503,
     message: 'Company verification is temporarily unavailable. Please try again shortly.',
   },
+  x402_invalid: {
+    status: 402,
+    message: "The x402 payment wasn't accepted (wrong amount, token, recipient or signature).",
+  },
+  x402_unknown_payer: {
+    status: 403,
+    message: 'This payment does not come from an active AI caller registered with Cachet.',
+  },
+  x402_wrong_payer: {
+    status: 403,
+    message: "The payment must come from this AI caller's own Concordium account.",
+  },
+  x402_ambiguous_payer: {
+    status: 400,
+    message: 'This account runs several AI callers: add ?badge=… to say which one gets the credits.',
+  },
+  x402_settle_failed: {
+    status: 402,
+    message: "The x402 payment couldn't be settled on Concordium. Nothing was charged; try again.",
+  },
+  x402_unavailable: {
+    status: 503,
+    message: "The x402 payment service isn't reachable right now. Please try again shortly.",
+  },
   pay_pass_invalid: {
     status: 401,
     message: 'This payment link has expired. Go back to the Cachet bot and tap "Pay safely" again.',

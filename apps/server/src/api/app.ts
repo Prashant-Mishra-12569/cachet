@@ -13,7 +13,8 @@ import { agentRoutes } from './routes/agents';
 import { authRoutes } from './routes/auth';
 import { miniAppRoutes, type MiniAppRouteDeps } from './routes/miniapp';
 import { browserPayRoutes } from './routes/pay';
-import { sealRoutes, wellKnownRoutes } from './routes/seals';
+import { creditRoutes } from './routes/credits';
+import { sealRoutes, wellKnownRoutes, type SealRouteDeps } from './routes/seals';
 import { businessRoutes } from './routes/business';
 
 export interface AppDeps {
@@ -31,6 +32,8 @@ export interface AppDeps {
   webOrigin: string;
   secureCookies: boolean;
   trustProxy: boolean;
+  /** x402 seal billing (/v1/credits/purchase + per-seal payment). Absent = credits only. */
+  x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
   miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
   /** Extra health checks (database, verifier); each returns true when healthy. */
@@ -60,7 +63,8 @@ export function createApp(deps: AppDeps) {
   app.route('/v1/auth', authRoutes(deps));
   app.route('/v1/business', businessRoutes(deps));
   app.route('/v1/agents', agentRoutes(deps));
-  app.route('/v1/seals', sealRoutes(deps));
+  app.route('/v1/seals', sealRoutes({ ...deps, billing: deps.x402 }));
+  if (deps.x402) app.route('/v1/credits', creditRoutes({ ...deps, billing: deps.x402.billing }));
   if (deps.miniApp) {
     app.route('/v1/tg', miniAppRoutes({ ...deps, ...deps.miniApp }));
     // Paying from the phone's browser, with a one-time pass from the Mini App.

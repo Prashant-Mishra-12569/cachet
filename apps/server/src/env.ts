@@ -88,6 +88,21 @@ const EnvSchema = z.object({
   /** Decimals of that token (EUDemo: 6). Checked against the chain at start-up. */
   PLT_DECIMALS: z.coerce.number().int().min(0).max(18).default(6),
 
+  /**
+   * x402 seal billing. "local" = our own facilitator inside this server (the sponsor account pays the
+   * fees); "hosted" = Concordium's hosted testnet facilitator (needs X402_FACILITATOR_URL + _API_KEY).
+   */
+  X402_FACILITATOR: z.enum(['local', 'hosted']).default('local'),
+  X402_FACILITATOR_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  X402_FACILITATOR_API_KEY: optionalString,
+  /** How the hosted facilitator wants the key. Concordium's: X-API-Key (verified 25 Nov; `pnpm x402:check`). */
+  X402_FACILITATOR_AUTH: z.enum(['bearer', 'x-api-key']).default('x-api-key'),
+  /** Price of one sealed call, in the payment token (plan §13.1: €0.01). */
+  SEAL_PRICE: z
+    .string()
+    .regex(/^\d+(\.\d{1,6})?$/, 'must look like 0.01')
+    .default('0.01'),
+
   /** Concordium Agent Registry service (REST + MCP). */
   AGENT_REGISTRY_API: z.url().default('https://agent-registry-mcp.concordium.com'),
   /** GitHub token with ONLY the "gist" scope: temporary public hosting for Agent Cards. */

@@ -6,7 +6,9 @@ import {
   buildSponsoredTransfer,
   createGrpcClient,
   finalizedSummary,
+  findTokenTransfers,
   tokenBalanceRaw,
+  transferMatches,
   createCachedMessageVerifier,
   createRegistryClient,
   createTxSender,
@@ -33,7 +35,10 @@ import { createCompanyProofService } from './business/company-proof';
 import { createBusinessRepo } from './business/repo';
 import { loadEnv } from './env';
 import { webAppSecret } from './miniapp/init-data';
-import { FACILITATOR_READY } from './facilitator/index';
+import { createHostedFacilitator, createLocalFacilitator } from './facilitator/index';
+import { createSealBilling } from './x402/billing';
+import type { FacilitatorClient } from '@x402/core/server';
+import { NETWORK_CONFIG } from '@cachet/shared';
 import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
 import { createSealService } from './seals/service';
@@ -152,8 +157,6 @@ const sponsorKey =
       })
     : null;
 
-// Safe payments (sponsored PLT transfers). A sponsored transfer uses the PAYER's nonce, so it never
-// clashes with the sponsor's own anchoring transactions.
 // A wrong decimals setting would make every amount wrong by a factor of 10^n: check it on chain.
 let decimalsOk = true;
 try {
@@ -167,6 +170,8 @@ try {
 } catch (err) {
   console.warn('[pay] could not check token decimals on chain:', err instanceof Error ? err.message : err);
 }
+// Safe payments (sponsored PLT transfers). A sponsored transfer uses the PAYER's nonce, so it never
+// clashes with the sponsor's own anchoring transactions.
 const pay =
   sponsorKey && env.CCD_SPONSOR_ADDRESS && decimalsOk
     ? createPayService({
@@ -193,6 +198,63 @@ const pay =
     : undefined;
 if (!pay) console.warn('[pay] safe payments disabled: set CCD_SPONSOR_KEY_PATH and CCD_SPONSOR_ADDRESS');
 
+// x402 seal billing (plan §13.1): every seal is prepaid in the payment token, to the treasury.
+const x402Network = NETWORK_CONFIG[env.CCD_NETWORK].caip2 as `${string}:${string}`;
+let facilitator: FacilitatorClient | null = null;
+if (env.X402_FACILITATOR === 'hosted') {
+  if (env.X402_FACILITATOR_URL && env.X402_FACILITATOR_API_KEY) {
+    facilitator = createHostedFacilitator({
+      url: env.X402_FACILITATOR_URL,
+      apiKey: env.X402_FACILITATOR_API_KEY,
+      authHeader: (key) =>
+        env.X402_FACILITATOR_AUTH === 'x-api-key' ? { 'X-API-Key': key } : { Authorization: `Bearer ${key}` },
+    });
+  } else {
+    console.warn('[x402] X402_FACILITATOR=hosted needs X402_FACILITATOR_URL and X402_FACILITATOR_API_KEY');
+  }
+} else if (sponsorKey && env.CCD_SPONSOR_ADDRESS) {
+  facilitator = createLocalFacilitator({
+    network: x402Network,
+    sponsor: { address: env.CCD_SPONSOR_ADDRESS, signer: sponsorKey.signer },
+    grpc: {
+      host: env.CCD_GRPC_HOST ?? NETWORK_CONFIG[env.CCD_NETWORK].grpcHost,
+      port: env.CCD_GRPC_PORT ?? NETWORK_CONFIG[env.CCD_NETWORK].grpcPort,
+    },
+  });
+}
+const billing =
+  facilitator && env.CACHET_TREASURY_ADDRESS && decimalsOk
+    ? createSealBilling({
+        facilitator,
+        network: x402Network,
+        payTo: env.CACHET_TREASURY_ADDRESS,
+        asset: env.PLT_TOKEN_ID,
+        decimals: env.PLT_DECIMALS,
+        sealPrice: env.SEAL_PRICE,
+        agents: agentRepo,
+        seals: sealRepo,
+        findTransfers: (search) => findTokenTransfers(grpc, search),
+        confirmTransfer: (txHash, search) => transferMatches(grpc, txHash, search),
+      })
+    : undefined;
+if (billing) {
+  billing
+    .init()
+    .then(() =>
+      console.log(
+        `[x402] seal billing ready: ${env.SEAL_PRICE} ${env.PLT_TOKEN_ID} per seal → treasury ${env.CACHET_TREASURY_ADDRESS?.slice(0, 6)}…, facilitator: ${env.X402_FACILITATOR}`,
+      ),
+    )
+    .catch((err: unknown) =>
+      console.warn(
+        '[x402] facilitator not reachable yet (will retry on first payment):',
+        err instanceof Error ? err.message : err,
+      ),
+    );
+} else {
+  console.warn('[x402] seal billing disabled: needs a facilitator and CACHET_TREASURY_ADDRESS');
+}
+
 const app = createApp({
   network: env.CCD_NETWORK,
   version: pkg.version,
@@ -207,6 +269,7 @@ const app = createApp({
   webOrigin: env.WEB_ORIGIN,
   secureCookies: env.NODE_ENV === 'production',
   trustProxy: env.TRUST_PROXY,
+  ...(billing ? { x402: { billing, agents: agentRepo, credits: sealRepo } } : {}),
   ...(env.TELEGRAM_BOT_TOKEN
     ? {
         miniApp: {
@@ -274,7 +337,6 @@ if (bot) {
   console.log('[bot] skipped: TELEGRAM_BOT_TOKEN is not set in .env');
 }
 
-console.log(`[facilitator] ${FACILITATOR_READY ? 'ready' : 'not built yet (Phase 2)'}`);
 // Anchoring worker: Merkle root of new seals/closings → RegisterData on chain, paid by the sponsor.
 // The sponsor's TxSender must be the ONLY sender for that account in this process (nonce safety).
 if (sponsorKey && env.CCD_SPONSOR_ADDRESS) {
