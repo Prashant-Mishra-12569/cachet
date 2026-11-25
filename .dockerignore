@@ -1,0 +1,21 @@
+# Never send secrets, keys or local build output into a Docker image.
+.env
+.env.*
+!.env.example
+*.export
+*.pem
+*.key
+*.json.key
+.git
+.github
+.claude
+CLAUDE.md
+CACHET_PLAN.md
+*.pdf
+*.local.md
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+firmware
