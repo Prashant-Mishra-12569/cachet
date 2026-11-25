@@ -43,6 +43,7 @@ import { NETWORK_CONFIG } from '@cachet/shared';
 import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
 import { createPublicStats, createStatsSource } from './stats/public-stats';
+import { createDashboard, createDashboardSource } from './business/dashboard';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
@@ -293,6 +294,12 @@ const app = createApp({
       }
     : {}),
   stats: createPublicStats({ source: createStatsSource(database.db), network: env.CCD_NETWORK }),
+  dashboard: createDashboard({
+    source: createDashboardSource(database.db),
+    network: env.CCD_NETWORK,
+    webOrigin: env.WEB_ORIGIN,
+    registryUrl: registry.baseUrl,
+  }),
   checks: { database: () => database.ping(), verifier: () => verifier.health() },
 });
 

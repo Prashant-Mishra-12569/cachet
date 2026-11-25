@@ -19,6 +19,7 @@ import { createMemoryBusinessRepo } from '../business/repo';
 import { createMemoryKv } from '../infra/kv';
 import type { VerifierClient } from '../verify/verifier-client';
 import { createApp } from './app';
+import type { Dashboard } from '../business/dashboard';
 
 export const WEB_ORIGIN = 'http://localhost:3000';
 /** Real-format testnet addresses (public). */
@@ -111,6 +112,8 @@ export function makeTestApp(
     cardHost?: CardHost | null;
     /** Checks the AI's seal-request signatures. Default: accept, and record what was checked. */
     verifyAgentMessage?: VerifyMessage;
+    /** Company dashboard (/v1/business/dashboard/*). Absent = routes not mounted. */
+    dashboard?: Dashboard;
   } = {},
 ) {
   const clock = { t: Date.parse('2026-11-19T10:00:00Z') };
@@ -271,6 +274,7 @@ export function makeTestApp(
     trustProxy: false,
     x402: { billing, agents: agentRepo, credits: sealRepo },
     miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, pay, now },
+    ...(options.dashboard ? { dashboard: options.dashboard } : {}),
   });
   return {
     app,

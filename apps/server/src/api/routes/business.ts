@@ -5,6 +5,7 @@ import { explorerTxUrl, type Network } from '@cachet/shared';
 import type { AuthService } from '../../auth/service';
 import { ProofError, type CompanyProofService } from '../../business/company-proof';
 import type { BusinessRecord, BusinessRepo } from '../../business/repo';
+import { parseRange, type Dashboard } from '../../business/dashboard';
 import type { KvStore } from '../../infra/kv';
 import { VerifierError } from '../../verify/verifier-client';
 import { apiError } from '../errors';
@@ -19,6 +20,8 @@ export interface BusinessRouteDeps {
   webOrigin: string;
   secureCookies: boolean;
   trustProxy: boolean;
+  /** The company dashboard and compliance exports. */
+  dashboard?: Dashboard;
 }
 
 const VerifyBody = z.object({
@@ -123,5 +126,78 @@ export function businessRoutes(deps: BusinessRouteDeps) {
     },
   );
 
+  if (deps.dashboard) dashboardRoutes(app, deps, deps.dashboard);
+
   return app;
+}
+
+/** Byte-order mark: lets Excel open the CSV's accented names (é, ü) correctly. */
+const UTF8_BOM = String.fromCharCode(0xfeff);
+
+/** /v1/business/dashboard/*: only the signed-in company's own data, never cached. */
+function dashboardRoutes(app: Hono<SessionEnv>, deps: BusinessRouteDeps, dashboard: Dashboard) {
+  const company = async (account: string) => deps.repo.findByAccount(account);
+  const exportLimit = rateLimit({
+    kv: deps.kv,
+    name: 'dash-export',
+    limit: 30,
+    windowSeconds: 600,
+    trustProxy: deps.trustProxy,
+    byAccount: true,
+  });
+
+  app.get('/dashboard', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    c.header('Cache-Control', 'no-store');
+    return c.json(await dashboard.summary(b.id));
+  });
+
+  app.get('/dashboard/calls', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    const range = parseRange(c.req.query('from'), c.req.query('to'), new Date());
+    if (!range) return apiError(c, 'invalid_range');
+    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 50) || 50));
+    c.header('Cache-Control', 'no-store');
+    return c.json(await dashboard.calls(b.id, range, c.req.query('cursor'), limit));
+  });
+
+  app.get('/dashboard/payments', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    c.header('Cache-Control', 'no-store');
+    return c.json(await dashboard.payments(b.id));
+  });
+
+  app.get('/dashboard/reports', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    c.header('Cache-Control', 'no-store');
+    return c.json(await dashboard.reports(b.id));
+  });
+
+  /** All calls in a period as CSV (a download). */
+  app.get('/dashboard/export/calls.csv', exportLimit, async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    const range = parseRange(c.req.query('from'), c.req.query('to'), new Date());
+    if (!range) return apiError(c, 'invalid_range');
+    const { csv } = await dashboard.callsCsv(b.id, range);
+    const name = `cachet-calls_${range.from.toISOString().slice(0, 10)}_${new Date(range.to.getTime() - 1).toISOString().slice(0, 10)}.csv`;
+    c.header('Cache-Control', 'no-store');
+    c.header('Content-Type', 'text/csv; charset=utf-8');
+    c.header('Content-Disposition', `attachment; filename="${name}"`);
+    return c.body(UTF8_BOM + csv);
+  });
+
+  /** Everything for the printable compliance report (the page turns it into a PDF). */
+  app.get('/dashboard/export/report', exportLimit, async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    const range = parseRange(c.req.query('from'), c.req.query('to'), new Date());
+    if (!range) return apiError(c, 'invalid_range');
+    c.header('Cache-Control', 'no-store');
+    return c.json(await dashboard.compliance(b, range));
+  });
 }

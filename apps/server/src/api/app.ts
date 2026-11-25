@@ -17,6 +17,7 @@ import { creditRoutes } from './routes/credits';
 import { sealRoutes, wellKnownRoutes, type SealRouteDeps } from './routes/seals';
 import { businessRoutes } from './routes/business';
 import type { PublicStatsService } from '../stats/public-stats';
+import type { Dashboard } from '../business/dashboard';
 
 export interface AppDeps {
   network: Network;
@@ -37,6 +38,8 @@ export interface AppDeps {
   x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
   miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
+  /** Company dashboard + compliance exports (/v1/business/dashboard/*). */
+  dashboard?: Dashboard;
   /** Live totals for the public website (/v1/stats). */
   stats?: PublicStatsService;
   /** Extra health checks (database, verifier); each returns true when healthy. */

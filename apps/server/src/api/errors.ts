@@ -37,6 +37,10 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
       "This account doesn't have a verified company identity. Use an account created with your company identity (Global FinReg).",
   },
   business_not_verified: { status: 403, message: 'Prove your company first, then add your AI caller.' },
+  invalid_range: {
+    status: 400,
+    message: 'Choose a period of up to one year, with the start before the end.',
+  },
   agent_not_found: { status: 404, message: "We couldn't find this AI caller." },
   agent_wrong_state: {
     status: 409,
