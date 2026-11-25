@@ -21,6 +21,7 @@ interface AgentView {
   agentUri: string | null;
   registerTxUrl: string | null;
   cardTxUrl: string | null;
+  pendingCallingNumbers: string[] | null;
 }
 
 const PURPOSES: { id: string; label: string }[] = [
@@ -47,7 +48,8 @@ const message = (err: unknown) =>
     : 'Something went wrong. Please try again.';
 
 /** A signed transaction we still have to confirm (kept across reloads so nobody signs twice). */
-const pendingKey = (agentId: string, step: 'register' | 'card') => `cachet:pending:${agentId}:${step}`;
+const pendingKey = (agentId: string, step: 'register' | 'card' | 'numbers') =>
+  `cachet:pending:${agentId}:${step}`;
 const readPending = (key: string) => {
   try {
     return window.localStorage.getItem(key);
@@ -226,6 +228,121 @@ const BUSY_TEXT: Record<Exclude<Busy, null>, string> = {
   confirming: 'Waiting for Concordium to confirm (about 10 seconds)…',
 };
 
+/**
+ * The numbers your AI caller really calls from. Cachet only seals calls from these numbers, and people
+ * see them on /company. Changing them publishes a new Agent Card that you pin on Concordium; the old
+ * numbers stay in force until then.
+ */
+function NumbersEditor({
+  agent,
+  account,
+  onChange,
+}: {
+  agent: AgentView;
+  account: string;
+  onChange: (a: AgentView) => void;
+}) {
+  const key = pendingKey(agent.id, 'numbers');
+  const [text, setText] = useState(agent.callingNumbers.join(', '));
+  const [busy, setBusy] = useState<Busy>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  useEffect(() => setPending(readPending(key)), [key]);
+
+  const confirm = async (txHash: string) => {
+    setBusy('confirming');
+    const { agent: next } = await api.post<{ agent: AgentView }>(`/v1/agents/${agent.id}/numbers/confirm`, {
+      txHash,
+    });
+    writePending(key, null);
+    setPending(null);
+    onChange(next);
+    setText(next.callingNumbers.join(', '));
+  };
+
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const numbers = [...new Set(text.split(/[\s,;]+/).filter(Boolean))];
+    if (numbers.length === 0 || numbers.some((n) => !/^\+[1-9]\d{6,14}$/.test(n))) {
+      setError('Use international format, separated by commas, like +918035735856.');
+      return;
+    }
+    try {
+      setBusy('publishing');
+      const prepared = await api.post<{ walletTx: WalletTx }>(`/v1/agents/${agent.id}/numbers/prepare`, {
+        callingNumbers: numbers,
+      });
+      setBusy('wallet');
+      const txHash = await sendContractUpdate(NETWORK, account, prepared.walletTx);
+      writePending(key, txHash);
+      setPending(txHash);
+      await confirm(txHash);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function retry() {
+    if (!pending) return;
+    setError(null);
+    try {
+      await confirm(pending);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="flex flex-col gap-2 rounded-xl border border-line p-3 text-sm">
+      <label htmlFor={`numbers-${agent.id}`} className="font-medium">
+        Calls come from
+      </label>
+      <input
+        id={`numbers-${agent.id}`}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="min-h-11 rounded-xl border border-line bg-surface px-3 font-mono"
+        autoComplete="off"
+      />
+      <p className="text-ink-2">
+        Cachet only seals calls from these numbers. Changing them asks your wallet to update your Agent Card
+        on Concordium.
+      </p>
+      {pending ? (
+        <button
+          type="button"
+          onClick={retry}
+          disabled={busy !== null}
+          className="min-h-11 rounded-full border border-seal px-5 font-medium text-seal disabled:opacity-60"
+        >
+          {busy ? 'Checking…' : 'Check again'}
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={busy !== null || text.trim() === agent.callingNumbers.join(', ')}
+          className="min-h-11 rounded-full bg-seal px-5 font-medium text-surface disabled:opacity-60"
+        >
+          {busy ? 'Working…' : 'Update calling numbers'}
+        </button>
+      )}
+      <div aria-live="polite">
+        {busy && <p className="text-ink-2">{BUSY_TEXT[busy]}</p>}
+        {error && (
+          <p className="rounded-xl bg-alert-soft px-4 py-3 text-alert" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    </form>
+  );
+}
+
 function AgentCard({
   agent,
   account,
@@ -381,6 +498,8 @@ function AgentCard({
           </p>
         </div>
       )}
+
+      {agent.status === 'active' && <NumbersEditor agent={agent} account={account} onChange={onChange} />}
 
       {step && (
         <div className="flex flex-col gap-2">
