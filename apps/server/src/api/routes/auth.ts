@@ -87,6 +87,18 @@ export function authRoutes(deps: AuthRouteDeps) {
     return c.json({ account: session.account, expiresAt: session.expiresAt });
   });
 
+  // "Am I signed in?" for the website. Not being signed in is a normal answer here (200), so pages
+  // don't log a failed request for every visitor. API clients that need a session keep using /me.
+  app.get('/session', async (c) => {
+    const session = await deps.auth.getSession(getCookie(c, cookieName));
+    c.header('Cache-Control', 'no-store');
+    return c.json(
+      session
+        ? { signedIn: true, account: session.account, expiresAt: session.expiresAt }
+        : { signedIn: false },
+    );
+  });
+
   app.post('/logout', async (c) => {
     await deps.auth.endSession(getCookie(c, cookieName));
     deleteCookie(c, cookieName, { path: '/', secure: deps.secureCookies });

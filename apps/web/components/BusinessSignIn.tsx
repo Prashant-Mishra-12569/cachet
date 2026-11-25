@@ -26,10 +26,14 @@ export function BusinessSignIn() {
   // Already signed in? (the session cookie is sent automatically)
   useEffect(() => {
     api
-      .get<Me>('/v1/auth/me')
-      .then((m) => {
-        setMe(m);
-        setStep('signed-in');
+      .get<({ signedIn: true } & Me) | { signedIn: false }>('/v1/auth/session')
+      .then((s) => {
+        if (s.signedIn) {
+          setMe({ account: s.account, expiresAt: s.expiresAt });
+          setStep('signed-in');
+        } else {
+          setStep('signed-out');
+        }
       })
       .catch(() => setStep('signed-out'));
   }, []);

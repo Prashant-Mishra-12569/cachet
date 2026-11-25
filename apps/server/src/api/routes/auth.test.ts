@@ -225,6 +225,21 @@ describe('session: /me and /logout', () => {
     expect((await app.request('/v1/auth/me', { headers: { cookie: fake } })).status).toBe(401);
   });
 
+  it('/session answers signed in or not, always with 200 and never cached', async () => {
+    const { app, cookie, clock } = await signIn();
+    const yes = await app.request('/v1/auth/session', { headers: { cookie } });
+    expect(yes.status).toBe(200);
+    expect(await yes.json()).toMatchObject({ signedIn: true, account: ACCOUNT });
+    expect(yes.headers.get('cache-control')).toBe('no-store');
+    const no = await app.request('/v1/auth/session');
+    expect(no.status).toBe(200);
+    expect(await no.json()).toEqual({ signedIn: false });
+    clock.t += 8 * 60 * 60 * 1000 + 1;
+    expect(await (await app.request('/v1/auth/session', { headers: { cookie } })).json()).toEqual({
+      signedIn: false,
+    });
+  });
+
   it('the session ends after 8 hours', async () => {
     const { app, cookie, clock } = await signIn();
     clock.t += 8 * 60 * 60 * 1000 + 1;
