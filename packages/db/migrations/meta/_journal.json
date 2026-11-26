@@ -85,6 +85,13 @@
       "when": 1795697491620,
       "tag": "0011_reports_one_per_seal",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795699469613,
+      "tag": "0012_invites_and_api_keys",
+      "breakpoints": true
     }
   ]
 }

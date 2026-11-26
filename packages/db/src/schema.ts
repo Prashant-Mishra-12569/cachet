@@ -38,6 +38,8 @@ export const businesses = pgTable(
     requestTx: text('request_tx').notNull(),
     status: businessStatus('status').notNull().default('active'),
     neverCalls: boolean('never_calls').notNull().default(false),
+    /** The company's code in its customer invite link (t.me/<bot>?start=co_<code>). Made on first use. */
+    inviteCode: text('invite_code').unique(),
     verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -283,11 +285,39 @@ export const people = pgTable('people', {
   /** AES-256-GCM(iv | ciphertext | tag), base64url. */
   phoneEnc: text('phone_enc').notNull(),
   lang: text('lang').notNull().default('en'),
+  /** The company whose invite link brought this person (counted on its dashboard; nothing else). */
+  invitedByBusinessId: uuid('invited_by_business_id').references(() => businesses.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type PersonRow = typeof people.$inferSelect;
+
+/**
+ * Read-only API keys a company makes in its dashboard, for its own systems to pull call data.
+ * Only a sha256 of the key is stored; the key itself is shown once.
+ */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull().unique(),
+    /** First characters of the key, so people can tell their keys apart ("cachet_ro_Ab3k…"). */
+    prefix: text('prefix').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('api_keys_business_idx').on(t.businessId),
+    check('api_key_name_length', sql`char_length(${t.name}) between 1 and 60`),
+  ],
+);
+export type ApiKeyRow = typeof apiKeys.$inferSelect;
 
 /**
  * A guardian gets an alert when their ward is on an unverified call.
