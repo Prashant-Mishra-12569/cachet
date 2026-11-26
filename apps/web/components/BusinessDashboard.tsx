@@ -7,6 +7,7 @@ import { Calls } from '@/components/business/Calls';
 import { Compliance } from '@/components/business/Compliance';
 import { Overview } from '@/components/business/Overview';
 import { NeverCalls } from '@/components/business/NeverCalls';
+import { ApiKeys } from '@/components/business/ApiKeys';
 import { Payments } from '@/components/business/Payments';
 import { api, ApiError } from '@/lib/api';
 import type { Summary } from '@/lib/dashboard-types';
@@ -183,6 +184,7 @@ export function BusinessDashboard({ account, onSignOut }: { account: string; onS
               }
               onChange={setBusiness}
             />
+            <ApiKeys />
           </div>
         )}
       </main>

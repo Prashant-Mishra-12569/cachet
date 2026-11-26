@@ -21,6 +21,7 @@ const TOC = [
   ['checks', 'What Cachet checks'],
   ['verify', 'Verify a seal yourself'],
   ['mcp', 'Use it from an AI agent (MCP)'],
+  ['data-api', 'Read your data (API)'],
   ['errors', 'Errors'],
   ['threats', 'Threat model'],
   ['concordium', 'Built on Concordium'],
@@ -425,6 +426,21 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
             The key file never leaves your machine. To see it work, run <C>pnpm mcp:example +31612345678</C>:
             an example agent connects, checks a company, seals, checks the seal and closes it.
           </P>
+
+          <H2 id="data-api">Read your data (API)</H2>
+          <P>
+            Make a read-only key in your dashboard (Setup, API keys). It lets your own systems pull the same
+            numbers you see in the dashboard. It can&apos;t change anything, and never sees phone numbers or
+            call codes.
+          </P>
+          <Code>{`
+GET ${API}/v1/data/summary                         calls, pickup rate, payments, credits, chart
+GET ${API}/v1/data/calls?from=2026-11-01&to=2026-11-30&limit=50[&cursor=…]
+GET ${API}/v1/data/payments
+GET ${API}/v1/data/calls.csv?from=2026-11-01&to=2026-11-30
+
+Authorization: Bearer cachet_ro_…              120 requests per 10 minutes per company
+`}</Code>
 
           <H2 id="errors">Errors</H2>
           <P>

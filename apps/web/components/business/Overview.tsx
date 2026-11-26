@@ -4,6 +4,7 @@ import type { BusinessView } from '@/components/CompanyProof';
 import { countryName } from '@/lib/format';
 import type { Summary } from '@/lib/dashboard-types';
 import { CallsChart } from './CallsChart';
+import { InviteCustomers } from './InviteCustomers';
 import { ExtLink, Stat, card, money } from './ui';
 
 const nf = new Intl.NumberFormat('en');
@@ -140,6 +141,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
           note="Calls recorded on Concordium. New calls join within about 5 minutes."
         />
       </div>
+      <InviteCustomers companyName={business.legalName} />
     </div>
   );
 }
