@@ -110,6 +110,11 @@ export const agents = pgTable(
   (t) => [
     index('agents_business_idx').on(t.businessId),
     index('agents_calling_numbers_idx').using('gin', t.callingNumbers),
+    // One live AI caller per AI account: otherwise one company could hold another's account, and its
+    // suspension would revoke the other company's credential (it is keyed by the account).
+    uniqueIndex('agents_account_live_unique')
+      .on(t.agentAccount)
+      .where(sql`${t.status} <> 'revoked'`),
     check('agent_name_length', sql`char_length(${t.name}) between 1 and 80`),
     check('agent_description_length', sql`char_length(${t.description}) between 1 and 500`),
     check('agent_language_iso', sql`${t.language} ~ '^[a-z]{2}$'`),
@@ -286,7 +291,9 @@ export const people = pgTable('people', {
   phoneEnc: text('phone_enc').notNull(),
   lang: text('lang').notNull().default('en'),
   /** The company whose invite link brought this person (counted on its dashboard; nothing else). */
-  invitedByBusinessId: uuid('invited_by_business_id').references(() => businesses.id, { onDelete: 'set null' }),
+  invitedByBusinessId: uuid('invited_by_business_id').references(() => businesses.id, {
+    onDelete: 'set null',
+  }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

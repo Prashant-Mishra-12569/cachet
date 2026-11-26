@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "agents_account_live_unique" ON "agents" USING btree ("agent_account") WHERE "agents"."status" <> 'revoked';
