@@ -1,0 +1,3 @@
+ALTER TABLE "reports" ADD COLUMN "claimed_business_id" uuid;--> statement-breakpoint
+ALTER TABLE "reports" ADD CONSTRAINT "reports_claimed_business_id_businesses_id_fk" FOREIGN KEY ("claimed_business_id") REFERENCES "public"."businesses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "reports_claimed_business_idx" ON "reports" USING btree ("claimed_business_id","created_at");

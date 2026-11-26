@@ -352,9 +352,14 @@ export const reports = pgTable(
     /** e.g. "unverified_call" */
     reason: text('reason').notNull(),
     claimedCompany: text('claimed_company'),
+    /** The verified company the caller pretended to be, when the name matched one ("scam calls using your name"). */
+    claimedBusinessId: uuid('claimed_business_id').references(() => businesses.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('reports_phone_idx').on(t.phoneHash, t.createdAt)],
+  (t) => [
+    index('reports_phone_idx').on(t.phoneHash, t.createdAt),
+    index('reports_claimed_business_idx').on(t.claimedBusinessId, t.createdAt),
+  ],
 );
 export type SealRow = typeof seals.$inferSelect;
 export type AnchorRow = typeof anchors.$inferSelect;
