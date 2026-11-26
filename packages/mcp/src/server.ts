@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CachetError, type CachetClient } from '@cachet/sdk';
 
 /**
- * The Cachet MCP server: any MCP-capable AI agent (Claude, LangChain, a voice-AI platform…) can seal
+ * The Cachet MCP server: any MCP-capable AI agent (a desktop assistant, LangChain, a voice-AI platform…) can seal
  * its phone calls, close them, and check companies and seals.
  *
  * Tools:

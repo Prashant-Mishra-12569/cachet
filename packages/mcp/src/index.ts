@@ -1,5 +1,5 @@
 /**
- * Run the Cachet MCP server over stdio (how MCP clients like Claude Desktop start local tools).
+ * Run the Cachet MCP server over stdio (how desktop MCP clients start local tools).
  *
  * Settings (environment, or the repo's .env):
  *   CACHET_AGENT_BADGE     your AI caller's Verified-by-Concordium badge
