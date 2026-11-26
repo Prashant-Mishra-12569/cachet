@@ -82,6 +82,11 @@ const EnvSchema = z.object({
   PHONE_ENC_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
   /** Anchor the ledger when the oldest item is this old (plan: 5 minutes). */
   ANCHOR_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(300),
+  /** Risk scoring: suspend a company when ≥ MIN_REPORTERS different people (and ≥ MIN_SHARE of the
+   *  people it called) reported its sealed calls within WINDOW_DAYS. */
+  RISK_WINDOW_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  RISK_MIN_REPORTERS: z.coerce.number().int().min(2).max(1000).default(5),
+  RISK_MIN_SHARE: z.coerce.number().min(0).max(1).default(0.1),
   /** Concordium Web3 ID: Cachet's "Authorised AI Caller" registry (CIS-4), e.g. <13167,0>. Unset = off. */
   W3ID_REGISTRY: z
     .string()

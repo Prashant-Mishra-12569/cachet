@@ -22,6 +22,12 @@ export interface BusinessRouteDeps {
   trustProxy: boolean;
   /** The company dashboard and compliance exports. */
   dashboard?: Dashboard;
+  /** Risk scoring: the company's own report numbers, shown on its dashboard. */
+  riskStatus?: {
+    status(
+      businessId: string,
+    ): Promise<{ reporters: number; called: number; suspendAt: number; windowDays: number }>;
+  };
   /** The company's AI callers (a "never calls" company may not have a live one). */
   agents: { list(account: string): Promise<{ status: string }[]> };
 }
@@ -176,7 +182,11 @@ function dashboardRoutes(app: Hono<SessionEnv>, deps: BusinessRouteDeps, dashboa
     const b = await company(c.var.account);
     if (!b) return apiError(c, 'business_not_verified');
     c.header('Cache-Control', 'no-store');
-    return c.json(await dashboard.summary(b.id));
+    const [summary, risk] = await Promise.all([
+      dashboard.summary(b.id),
+      deps.riskStatus ? deps.riskStatus.status(b.id) : Promise.resolve(null),
+    ]);
+    return c.json({ ...summary, company: { status: b.status }, risk });
   });
 
   app.get('/dashboard/calls', async (c) => {

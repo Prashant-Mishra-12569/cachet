@@ -13,13 +13,19 @@ import { apiError } from '../errors';
 import { clientIp } from '../middleware';
 import { ConfirmBody, PrepareBody, createPayPass, payFail, payView } from './pay';
 import { withExplorerLinks } from './seals';
+import { z } from 'zod';
+import { SEALED_CALL_REPORTS, type ReportsRepo } from '../../bot/reports-repo';
+import type { RiskEngine } from '../../business/risk';
 
 export interface MiniAppRouteDeps {
   kv: KvStore;
   /** HMAC key derived from the bot token (webAppSecret). */
   miniAppSecret: Buffer;
   people: Pick<PeopleRepo, 'byTelegramId'>;
-  sealRepo: Pick<SealRepo, 'historyForPhone'>;
+  sealRepo: Pick<SealRepo, 'historyForPhone' | 'get'>;
+  /** Reports about sealed calls + risk scoring. Absent = reporting sealed calls is off. */
+  reports?: Pick<ReportsRepo, 'reportSeal'> | undefined;
+  risk?: Pick<RiskEngine, 'afterReport'> | undefined;
   seals: SealService;
   family: Pick<FamilyRepo, 'linksOf'>;
   network: Network;
@@ -36,6 +42,8 @@ type MiniAppEnv = { Variables: { person: PersonRow; firstName: string } };
  * `Authorization: tma <initData>` and is checked on EVERY call (no cookie, no session to steal).
  * Only people who registered their number with the bot get data, and only their own.
  */
+const ReportBody = z.object({ category: z.enum(SEALED_CALL_REPORTS) }).strict();
+
 export function miniAppRoutes(deps: MiniAppRouteDeps) {
   const app = new Hono<MiniAppEnv>();
   const now = deps.now ?? Date.now;
@@ -110,6 +118,37 @@ export function miniAppRoutes(deps: MiniAppRouteDeps) {
       throw err;
     }
   });
+
+  /**
+   * Report a SEALED call I received (the caller pressured me, asked for something odd, or wasn't who
+   * they said). Only the person who got the call, once per call. Enough reports suspend the company.
+   */
+  app.post(
+    '/seals/:id/report',
+    bodyLimit({ maxSize: 1024, onError: (c) => apiError(c, 'invalid_request') }),
+    async (c) => {
+      if (!deps.reports) return apiError(c, 'not_found');
+      const id = c.req.param('id');
+      const body = ReportBody.safeParse(await c.req.json().catch(() => null));
+      if (!ULID_FORMAT.test(id) || !body.success) return apiError(c, 'invalid_request');
+      if (await over(`report:${c.var.person.id}`, 10)) return apiError(c, 'rate_limited');
+      const row = await deps.sealRepo.get(id);
+      // Someone else's seal looks exactly like a missing one (ids can't be probed).
+      if (!row || row.phoneHash !== c.var.person.phoneHash) return apiError(c, 'seal_not_found');
+      const saved = await deps.reports.reportSeal(
+        {
+          personId: c.var.person.id,
+          phoneHash: c.var.person.phoneHash,
+          sealId: id,
+          reason: `sealed_call:${body.data.category}`,
+          claimedCompany: null,
+        },
+        new Date(now()),
+      );
+      if (saved && deps.risk) await deps.risk.afterReport(row.businessId);
+      return c.json({ reported: true, alreadyReported: !saved });
+    },
+  );
 
   /** Safe payment, step 1: build the sponsored transfer for the person's wallet to approve. */
   app.post(

@@ -93,6 +93,7 @@ export function createSealDelivery(deps: DeliveryDeps) {
     if (row.status === 'superseded') return copy.sealReplaced(ref.company);
     if (row.status === 'open') return copy.sealExpired(ref.company, ref.code); // open but past expiry
     if (row.closeReason === 'blocked_by_callee') return copy.sealEndedBlocked(ref.company, ref.code);
+    if (row.closeReason === 'company_suspended') return copy.sealEndedSuspended(ref.company, ref.code);
     return copy.sealEnded(ref.company, ref.code);
   }
 

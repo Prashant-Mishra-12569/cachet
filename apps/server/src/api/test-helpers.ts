@@ -21,6 +21,8 @@ import type { VerifierClient } from '../verify/verifier-client';
 import { createApp } from './app';
 import type { Dashboard } from '../business/dashboard';
 import { createCompanyDirectory } from '../business/companies';
+import { createRiskEngine } from '../business/risk';
+import { createMemoryReportsRepo } from '../bot/reports-repo';
 
 export const WEB_ORIGIN = 'http://localhost:3000';
 /** Real-format testnet addresses (public). */
@@ -180,6 +182,26 @@ export function makeTestApp(
     paymentFor: (sealId) => paymentsRepo.forSeal(sealId),
     now,
   });
+  // Reports + risk scoring, counted from the in-memory reports and seals (same rule as production).
+  const reportsRepo = createMemoryReportsRepo();
+  const risk = createRiskEngine({
+    source: {
+      counts: async (businessId) => {
+        const sealsOf = [...sealRepo.sealRows.values()].filter((r) => r.businessId === businessId);
+        const ids = new Set(sealsOf.map((r) => r.id));
+        const reporters = new Set(
+          reportsRepo.rows
+            .filter((r) => r.sealId && ids.has(r.sealId) && r.reason.startsWith('sealed_call:'))
+            .map((r) => r.personId),
+        );
+        return { reporters: reporters.size, called: new Set(sealsOf.map((r) => r.phoneHash)).size };
+      },
+    },
+    businesses: repo,
+    endSeals: (businessId) => seals.endForBusiness(businessId, 'company_suspended'),
+    now: () => new Date(clock.t),
+    log: { log: () => undefined },
+  });
   const people = createMemoryPeopleRepo();
   const familyRepo = createMemoryFamilyRepo((id) => people.byId(id));
   /** Fake chain for safe payments: balances, what was built, and finalized summaries by tx hash. */
@@ -277,8 +299,18 @@ export function makeTestApp(
     secureCookies: false,
     trustProxy: false,
     x402: { billing, agents: agentRepo, credits: sealRepo },
-    miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, pay, now },
+    miniApp: {
+      miniAppSecret: TG_SECRET,
+      people,
+      sealRepo,
+      family: familyRepo,
+      pay,
+      now,
+      reports: reportsRepo,
+      risk,
+    },
     ...(options.dashboard ? { dashboard: options.dashboard } : {}),
+    riskStatus: risk,
     companies: createCompanyDirectory({
       businesses: repo,
       agents: agentRepo,
@@ -287,6 +319,7 @@ export function makeTestApp(
     }),
   });
   return {
+    reportsRepo,
     app,
     x402,
     payChain,

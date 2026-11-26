@@ -263,6 +263,23 @@ export function createSealService(deps: SealServiceDeps) {
     };
   }
 
+  /** Close seals (each with its ledger item) and tell the bot, so their cards end. */
+  async function endRows(open: SealRow[], reason: string, now: Date) {
+    let ended = 0;
+    for (const row of open) {
+      const item = { v: 'cachet-seal-closed/1', sealId: row.id, closedAt: now.toISOString(), reason };
+      const closed = await deps.seals.close(row.id, row.agentId, now, reason, {
+        kind: 'seal_closed',
+        refId: row.id,
+        itemHash: sha256Hex(canonicalize(item)),
+      });
+      if (!closed) continue; // the AI closed it at the same moment: already ended
+      ended++;
+      publishClosed(row, reason);
+    }
+    return ended;
+  }
+
   const service = {
     /**
      * Keep the hot path off the chain: refresh every active agent's on-chain record (and its AI's
@@ -442,19 +459,13 @@ export function createSealService(deps: SealServiceDeps) {
       const open = (await deps.seals.openForPhone(calleeHash, now)).filter(
         (r) => r.businessId === businessId,
       );
-      let ended = 0;
-      for (const row of open) {
-        const item = { v: 'cachet-seal-closed/1', sealId: row.id, closedAt: now.toISOString(), reason };
-        const closed = await deps.seals.close(row.id, row.agentId, now, reason, {
-          kind: 'seal_closed',
-          refId: row.id,
-          itemHash: sha256Hex(canonicalize(item)),
-        });
-        if (!closed) continue; // the AI closed it at the same moment: already ended
-        ended++;
-        publishClosed(row, reason);
-      }
-      return ended;
+      return endRows(open, reason, now);
+    },
+
+    /** The company was suspended: end every open seal it has, so no card stays green. */
+    async endForBusiness(businessId: string, reason: 'company_suspended') {
+      const now = new Date(nowMs());
+      return endRows(await deps.seals.openForBusiness(businessId, now), reason, now);
     },
 
     /** Public, share-safe view: no phone data, no call code. */

@@ -39,6 +39,7 @@
     "voice:test": "pnpm --filter @cachet/scripts voice:test",
     "call": "pnpm --filter @cachet/scripts call",
     "w3id": "pnpm --filter @cachet/scripts w3id",
+    "company:status": "pnpm --filter @cachet/server company:status",
     "mcp": "pnpm -s --filter @cachet/mcp start",
     "mcp:example": "pnpm --filter @cachet/mcp example"
   },

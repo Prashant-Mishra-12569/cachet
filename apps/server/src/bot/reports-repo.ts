@@ -5,11 +5,21 @@ export interface NewReport {
   personId: string;
   phoneHash: string;
   sealId: string | null;
-  reason: 'unverified_call';
+  /** 'unverified_call' (no seal), or 'sealed_call:<category>' (a verified company's call). */
+  reason: 'unverified_call' | `sealed_call:${SealedCallReport}`;
   claimedCompany: string | null;
 }
 
+/** Why someone reports a sealed (verified) call. */
+export const SEALED_CALL_REPORTS = ['pressure', 'suspicious_request', 'not_who_they_said', 'other'] as const;
+export type SealedCallReport = (typeof SEALED_CALL_REPORTS)[number];
+
 export interface ReportsRepo {
+  /**
+   * A person reports a SEALED call they received. One per person per seal: null if they already did.
+   * Saved with its ledger item (anchored later) in one transaction.
+   */
+  reportSeal(input: NewReport & { sealId: string }, now: Date): Promise<{ id: string } | null>;
   /** Save the report AND its ledger item (anchored on chain later) in one transaction. */
   create(input: NewReport, now: Date): Promise<{ id: string }>;
   /**
@@ -52,6 +62,21 @@ export function createReportsRepo(db: Db): ReportsRepo {
         return { id };
       });
     },
+    async reportSeal(input, now) {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .insert(reports)
+          .values({ ...input, createdAt: now })
+          .onConflictDoNothing()
+          .returning({ id: reports.id });
+        const id = rows[0]?.id;
+        if (!id) return null; // already reported by this person
+        await tx
+          .insert(ledgerItems)
+          .values({ kind: 'report', refId: id, itemHash: ledgerHash(id, input, now) });
+        return { id };
+      });
+    },
     async claim(reportId, personId, claimedCompany, claimedBusinessId) {
       const rows = await db
         .update(reports)
@@ -70,6 +95,12 @@ export function createMemoryReportsRepo(): ReportsRepo & { rows: MemoryReport[] 
   return {
     rows,
     async create(input) {
+      const id = crypto.randomUUID();
+      rows.push({ ...input, id, claimedBusinessId: null });
+      return { id };
+    },
+    async reportSeal(input) {
+      if (rows.some((x) => x.sealId === input.sealId && x.personId === input.personId)) return null;
       const id = crypto.randomUUID();
       rows.push({ ...input, id, claimedBusinessId: null });
       return { id };

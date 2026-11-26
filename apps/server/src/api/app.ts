@@ -19,6 +19,7 @@ import { businessRoutes } from './routes/business';
 import type { PublicStatsService } from '../stats/public-stats';
 import type { Dashboard } from '../business/dashboard';
 import type { CompanyDirectory } from '../business/companies';
+import type { RiskEngine } from '../business/risk';
 import { rateLimit } from './middleware';
 
 export interface AppDeps {
@@ -39,7 +40,12 @@ export interface AppDeps {
   /** x402 seal billing (/v1/credits/purchase + per-seal payment). Absent = credits only. */
   x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
-  miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
+  miniApp?: Pick<
+    MiniAppRouteDeps,
+    'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now' | 'reports' | 'risk'
+  >;
+  /** Risk scoring (the company's own numbers on its dashboard). */
+  riskStatus?: Pick<RiskEngine, 'status'>;
   /** Public company lookup (/v1/companies). */
   companies?: CompanyDirectory;
   /** Company dashboard + compliance exports (/v1/business/dashboard/*). */

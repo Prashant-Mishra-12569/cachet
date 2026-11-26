@@ -36,7 +36,15 @@ export interface BusinessRepo {
    * anchored on chain later), so a company can't quietly deny it said so.
    */
   setNeverCalls(id: string, neverCalls: boolean, now: Date): Promise<BusinessRecord>;
+  /** Suspend or reinstate a company, with the reason in the permanent record. */
+  setStatus(id: string, status: 'active' | 'suspended', reason: string, now: Date): Promise<BusinessRecord>;
 }
+
+/** What gets anchored for a status change: a hash of (company, status, reason, time). */
+export const statusLedgerHash = (id: string, status: string, reason: string, at: Date) =>
+  sha256Hex(
+    canonicalize({ v: 'cachet-company-status/1', businessId: id, status, reason, at: at.toISOString() }),
+  );
 
 /** What gets anchored for a "never calls" change: a hash of the declaration, nothing personal. */
 export const neverCallsLedgerHash = (id: string, neverCalls: boolean, at: Date) =>
@@ -89,6 +97,23 @@ export function createBusinessRepo(db: Db): BusinessRepo {
       if (!row) throw new Error('upsert returned no row');
       return row;
     },
+    async setStatus(id, status, reason, now) {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .update(businesses)
+          .set({ status, updatedAt: now })
+          .where(eq(businesses.id, id))
+          .returning();
+        const row = rows[0];
+        if (!row) throw new Error('business not found');
+        await tx.insert(ledgerItems).values({
+          kind: 'company_status',
+          refId: id,
+          itemHash: statusLedgerHash(id, status, reason, now),
+        });
+        return row;
+      });
+    },
     async setNeverCalls(id, neverCalls, now) {
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -129,6 +154,13 @@ export function createMemoryBusinessRepo(): BusinessRepo {
       };
       byAccount.set(input.concordiumAccount, record);
       return record;
+    },
+    async setStatus(id, status) {
+      const b = [...byAccount.values()].find((x) => x.id === id);
+      if (!b) throw new Error('business not found');
+      const next = { ...b, status };
+      byAccount.set(b.concordiumAccount, next);
+      return next;
     },
     async setNeverCalls(id, neverCalls) {
       const b = [...byAccount.values()].find((x) => x.id === id);

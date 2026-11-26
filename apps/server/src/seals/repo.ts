@@ -45,6 +45,8 @@ export interface SealRepo {
   issuedSince(since: Date): Promise<SealRow[]>;
   /** Open seals for a callee right now (for /check, Phase 3). */
   openForPhone(phoneHash: string, now: Date): Promise<SealRow[]>;
+  /** A company's open, unexpired seals (to end them all when it is suspended). */
+  openForBusiness(businessId: string, now: Date): Promise<SealRow[]>;
   creditBalance(agentId: string): Promise<number>;
   /** Record a paid purchase (tx can be used once) and add the credits. False if the tx was already used. */
   addCredits(input: {
@@ -154,6 +156,15 @@ export function createSealRepo(db: Db): SealRepo {
         .orderBy(desc(seals.issuedAt), desc(seals.id));
     },
 
+    async openForBusiness(businessId, now) {
+      return db
+        .select()
+        .from(seals)
+        .where(
+          and(eq(seals.businessId, businessId), eq(seals.status, 'open'), sql`${seals.expiresAt} > ${now}`),
+        );
+    },
+
     async creditBalance(agentId) {
       const rows = await db.select().from(sealCredits).where(eq(sealCredits.agentId, agentId)).limit(1);
       return rows[0]?.balance ?? 0;
@@ -258,6 +269,10 @@ export function createMemorySealRepo() {
       [...sealRows.values()]
         .filter((s) => s.phoneHash === phoneHash && s.status === 'open' && s.expiresAt > now)
         .sort(newestFirst),
+    openForBusiness: async (businessId, now) =>
+      [...sealRows.values()].filter(
+        (s) => s.businessId === businessId && s.status === 'open' && s.expiresAt > now,
+      ),
     creditBalance: async (agentId) => credits.get(agentId) ?? 0,
     async addCredits(input) {
       if (purchases.some((p) => p.txHash === input.txHash)) return false;

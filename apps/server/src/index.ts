@@ -47,6 +47,7 @@ import { createCredentialChecker, createCredentialIssuer } from './agents/creden
 import { createPublicStats, createStatsSource } from './stats/public-stats';
 import { createDashboard, createDashboardSource } from './business/dashboard';
 import { createCompanyDirectory } from './business/companies';
+import { createRiskEngine, createRiskSource } from './business/risk';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
@@ -280,7 +281,21 @@ if (billing) {
   console.warn('[x402] seal billing disabled: needs a facilitator and CACHET_TREASURY_ADDRESS');
 }
 
+// Risk scoring: many people reporting a company's own sealed calls suspends it automatically.
+const reportsRepo = createReportsRepo(database.db);
+const risk = createRiskEngine({
+  source: createRiskSource(database.db),
+  businesses: repo,
+  endSeals: (businessId) => seals.endForBusiness(businessId, 'company_suspended'),
+  rule: {
+    windowDays: env.RISK_WINDOW_DAYS,
+    minReporters: env.RISK_MIN_REPORTERS,
+    minShare: env.RISK_MIN_SHARE,
+  },
+});
+
 const app = createApp({
+  riskStatus: risk,
   network: env.CCD_NETWORK,
   version: pkg.version,
   kv,
@@ -303,6 +318,8 @@ const app = createApp({
           sealRepo,
           family: familyRepo,
           pay,
+          reports: reportsRepo,
+          risk,
         },
       }
     : {}),
@@ -345,7 +362,7 @@ if (!(await verifier.health())) {
 const bot = env.TELEGRAM_BOT_TOKEN
   ? createBot(env.TELEGRAM_BOT_TOKEN, {
       people,
-      reports: createReportsRepo(database.db),
+      reports: reportsRepo,
       seals: sealRepo,
       family: familyRepo,
       consents: consentsRepo,
