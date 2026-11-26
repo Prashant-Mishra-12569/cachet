@@ -20,6 +20,8 @@ import type { PublicStatsService } from '../stats/public-stats';
 import type { Dashboard } from '../business/dashboard';
 import type { CompanyDirectory } from '../business/companies';
 import type { RiskEngine } from '../business/risk';
+import type { ApiKeys } from '../business/api-keys';
+import { dataRoutes } from './routes/data';
 import { rateLimit } from './middleware';
 
 export interface AppDeps {
@@ -46,6 +48,8 @@ export interface AppDeps {
   >;
   /** Risk scoring (the company's own numbers on its dashboard). */
   riskStatus?: Pick<RiskEngine, 'status'>;
+  /** Read-only API keys (dashboard) and the data API they open (/v1/data/*). */
+  apiKeys?: ApiKeys;
   /** Public company lookup (/v1/companies). */
   companies?: CompanyDirectory;
   /** Company dashboard + compliance exports (/v1/business/dashboard/*). */
@@ -108,6 +112,9 @@ export function createApp(deps: AppDeps) {
 
   app.route('/v1/auth', authRoutes(deps));
   app.route('/v1/business', businessRoutes(deps));
+  if (deps.apiKeys && deps.dashboard) {
+    app.route('/v1/data', dataRoutes({ apiKeys: deps.apiKeys, dashboard: deps.dashboard, kv: deps.kv }));
+  }
   app.route('/v1/agents', agentRoutes(deps));
   app.route('/v1/seals', sealRoutes({ ...deps, billing: deps.x402 }));
   if (deps.x402) app.route('/v1/credits', creditRoutes({ ...deps, billing: deps.x402.billing }));

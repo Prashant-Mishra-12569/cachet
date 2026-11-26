@@ -1,4 +1,5 @@
 import { businesses, eq, ledgerItems, sql, type Db } from '@cachet/db';
+import { randomBytes } from 'node:crypto';
 import { canonicalize, sha256Hex } from '@cachet/shared/seal';
 
 export interface BusinessRecord {
@@ -36,6 +37,10 @@ export interface BusinessRepo {
    * anchored on chain later), so a company can't quietly deny it said so.
    */
   setNeverCalls(id: string, neverCalls: boolean, now: Date): Promise<BusinessRecord>;
+  /** The company's customer-invite code, made on first use (random, reveals nothing). */
+  inviteCodeFor(id: string): Promise<string>;
+  /** Which company an invite code belongs to. */
+  findByInviteCode(code: string): Promise<BusinessRecord | null>;
   /** Suspend or reinstate a company, with the reason in the permanent record. */
   setStatus(id: string, status: 'active' | 'suspended', reason: string, now: Date): Promise<BusinessRecord>;
 }
@@ -45,6 +50,9 @@ export const statusLedgerHash = (id: string, status: string, reason: string, at:
   sha256Hex(
     canonicalize({ v: 'cachet-company-status/1', businessId: id, status, reason, at: at.toISOString() }),
   );
+
+/** 10 random letters/digits for an invite link (t.me deep-link payloads allow [A-Za-z0-9_-], max 64). */
+export const newInviteCode = () => randomBytes(8).toString('base64url').replace(/[-_]/g, 'x').slice(0, 10);
 
 /** What gets anchored for a "never calls" change: a hash of the declaration, nothing personal. */
 export const neverCallsLedgerHash = (id: string, neverCalls: boolean, at: Date) =>
@@ -97,6 +105,31 @@ export function createBusinessRepo(db: Db): BusinessRepo {
       if (!row) throw new Error('upsert returned no row');
       return row;
     },
+    async inviteCodeFor(id) {
+      const existing = await db
+        .select({ code: businesses.inviteCode })
+        .from(businesses)
+        .where(eq(businesses.id, id))
+        .limit(1);
+      if (existing[0]?.code) return existing[0].code;
+      // Only set it if still empty, so two requests at once end up with the same code.
+      await db
+        .update(businesses)
+        .set({ inviteCode: newInviteCode() })
+        .where(sql`${businesses.id} = ${id} and ${businesses.inviteCode} is null`);
+      const after = await db
+        .select({ code: businesses.inviteCode })
+        .from(businesses)
+        .where(eq(businesses.id, id))
+        .limit(1);
+      const code = after[0]?.code;
+      if (!code) throw new Error('business not found');
+      return code;
+    },
+    async findByInviteCode(code) {
+      const rows = await db.select().from(businesses).where(eq(businesses.inviteCode, code)).limit(1);
+      return rows[0] ?? null;
+    },
     async setStatus(id, status, reason, now) {
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -137,6 +170,7 @@ export function createBusinessRepo(db: Db): BusinessRepo {
 /** In-memory repo for tests. */
 export function createMemoryBusinessRepo(): BusinessRepo {
   const byAccount = new Map<string, BusinessRecord>();
+  const inviteCodes = new Map<string, string>();
   return {
     findByAccount: async (account) => byAccount.get(account) ?? null,
     findById: async (id) => [...byAccount.values()].find((b) => b.id === id) ?? null,
@@ -154,6 +188,17 @@ export function createMemoryBusinessRepo(): BusinessRepo {
       };
       byAccount.set(input.concordiumAccount, record);
       return record;
+    },
+    async inviteCodeFor(id) {
+      const existing = inviteCodes.get(id);
+      if (existing) return existing;
+      const code = newInviteCode();
+      inviteCodes.set(id, code);
+      return code;
+    },
+    async findByInviteCode(code) {
+      const id = [...inviteCodes].find(([, c]) => c === code)?.[0];
+      return [...byAccount.values()].find((b) => b.id === id) ?? null;
     },
     async setStatus(id, status) {
       const b = [...byAccount.values()].find((x) => x.id === id);

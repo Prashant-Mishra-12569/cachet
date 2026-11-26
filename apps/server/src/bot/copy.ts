@@ -19,6 +19,11 @@ export const copy = {
   protected:
     "🔒 You're protected.\nWhen a verified company's AI calls you, I'll send a green card here.\n<b>No card? Treat it as a scam.</b>",
   needNumber: 'Share your number first, then I can check calls for you.',
+  // A company's customer-invite link
+  invitedWelcome: (company: string) =>
+    `<b>${esc(company)}</b> invited you to Cachet.\nWhen their AI really calls you, a green card with a code appears here first. No card? It's a scam.\nShare your number to begin.`,
+  invitedAlready: (company: string) =>
+    `🔒 You're already protected.\nWhen <b>${esc(company)}</b>'s AI really calls you, a green card with a code appears here first.`,
 
   sealCard: (s: {
     company: string;

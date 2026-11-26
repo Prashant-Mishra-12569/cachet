@@ -21,7 +21,7 @@ export interface BotDeps {
   seals: Pick<SealRepo, 'get' | 'openForPhone' | 'historyForPhone' | 'businessesForPhone'>;
   family: FamilyRepo;
   consents: ConsentsRepo;
-  businesses: Pick<BusinessRepo, 'searchByName' | 'findById'>;
+  businesses: Pick<BusinessRepo, 'searchByName' | 'findById' | 'findByInviteCode'>;
   agents: Pick<AgentRepo, 'listByBusiness'>;
   kv: KvStore;
   /** End a blocked company's open seals to a person (seal service). */
@@ -30,6 +30,9 @@ export interface BotDeps {
   phonePepper: string;
   now?: () => number;
 }
+
+/** Payload of a company's customer-invite link: t.me/<bot>?start=co_<invite code>. */
+export const COMPANY_INVITE_PREFIX = 'co_';
 
 const shareKeyboard = () => new Keyboard().requestContact(copy.shareButton).resized().oneTime();
 
@@ -60,10 +63,14 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
   const family = createFamilyFeature({ family: deps.family, people: deps.people, kv: deps.kv, now });
   const info = createInfoFeature({ ...deps, now });
 
-  /** /start, or /start fam_<token> from a family invite link. */
+  /** /start, /start fam_<token> (family invite) or /start co_<code> (a company's customer invite). */
   async function start(ctx: Context, payload: string) {
     const from = ctx.from;
     if (!from) return;
+    if (payload.startsWith(COMPANY_INVITE_PREFIX)) {
+      await companyInvite(ctx, payload.slice(COMPANY_INVITE_PREFIX.length));
+      return;
+    }
     const invite = payload.startsWith(INVITE_PREFIX) ? payload.slice(INVITE_PREFIX.length) : null;
     const person = await deps.people.byTelegramId(from.id);
     if (!person) {
@@ -76,6 +83,31 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
     }
     if (invite) await family.openInvite(ctx, invite);
     else await ctx.reply(copy.protected, { parse_mode: 'HTML' });
+  }
+
+  /** A company invited its customers: welcome them in its name, and credit it if they join. */
+  async function companyInvite(ctx: Context, code: string) {
+    const from = ctx.from;
+    if (!from) return;
+    const company = /^[A-Za-z0-9]{10}$/.test(code) ? await deps.businesses.findByInviteCode(code) : null;
+    const person = await deps.people.byTelegramId(from.id);
+    if (!company || company.status !== 'active') {
+      // An unknown or suspended company's link: just the normal start.
+      await ctx.reply(person ? copy.protected : copy.welcome, {
+        parse_mode: 'HTML',
+        ...(person ? {} : { reply_markup: shareKeyboard() }),
+      });
+      return;
+    }
+    if (person) {
+      await ctx.reply(copy.invitedAlready(company.legalName), { parse_mode: 'HTML' });
+      return;
+    }
+    await deps.kv.set(`bot:invited-by:${from.id}`, company.id, 24 * 60 * 60);
+    await ctx.reply(copy.invitedWelcome(company.legalName), {
+      parse_mode: 'HTML',
+      reply_markup: shareKeyboard(),
+    });
   }
 
   /** "Is this call real?" (plan §7.3): green with company + code if an open seal exists, else red. */
@@ -134,12 +166,14 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
       await ctx.reply(copy.notOwnContact, { parse_mode: 'HTML', reply_markup: shareKeyboard() });
       return;
     }
+    const invitedBy = await deps.kv.take(`bot:invited-by:${ctx.from.id}`);
     await deps.people.register({
       tgUserId: ctx.from.id,
       chatId: ctx.chat.id,
       phoneHash: phoneHash(deps.phonePepper, e164),
       phoneEnc: deps.phoneCipher.encrypt(e164),
       lang: 'en',
+      invitedByBusinessId: invitedBy,
     });
     await ctx.reply(copy.protected, { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
     // They came from a family invite link: continue it now.

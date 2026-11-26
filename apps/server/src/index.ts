@@ -48,6 +48,7 @@ import { createPublicStats, createStatsSource } from './stats/public-stats';
 import { createDashboard, createDashboardSource } from './business/dashboard';
 import { createCompanyDirectory } from './business/companies';
 import { createRiskEngine, createRiskSource } from './business/risk';
+import { createApiKeyRepo, createApiKeys } from './business/api-keys';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
@@ -330,6 +331,7 @@ const app = createApp({
     network: env.CCD_NETWORK,
     registryUrl: registry.baseUrl,
   }),
+  apiKeys: createApiKeys({ repo: createApiKeyRepo(database.db) }),
   dashboard: createDashboard({
     source: createDashboardSource(database.db),
     network: env.CCD_NETWORK,

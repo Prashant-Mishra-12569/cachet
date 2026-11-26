@@ -1061,3 +1061,44 @@ describe('Report: who did the caller pretend to be?', () => {
     );
   });
 });
+
+describe("a company's customer invite link", () => {
+  async function company(t: ReturnType<typeof setup>) {
+    const b = await t.businesses.upsertVerified({
+      concordiumAccount: 'acct-abc',
+      legalName: 'ABC Energy',
+      legalCountry: 'NL',
+      issuer: 'did:ccd:testnet:idp:4',
+      proofTx: 'aa'.repeat(32),
+      requestTx: 'bb'.repeat(32),
+      verifiedAt: new Date('2026-11-19T10:00:00Z'),
+    });
+    return { b, code: await t.businesses.inviteCodeFor(b.id) };
+  }
+
+  it('welcomes a new person in the company’s name and credits it once they join', async () => {
+    const t = setup();
+    const { b, code } = await company(t);
+    await t.command(`/start co_${code}`);
+    expect(t.lastText()).toContain('<b>ABC Energy</b> invited you to Cachet.');
+    await t.contact(USER);
+    expect((await t.people.byTelegramId(USER))?.invitedByBusinessId).toBe(b.id);
+  });
+
+  it('someone already protected is not re-credited, just reassured', async () => {
+    const t = setup();
+    await t.contact(USER);
+    const { code } = await company(t);
+    await t.command(`/start co_${code}`);
+    expect(t.lastText()).toContain("You're already protected.");
+    expect((await t.people.byTelegramId(USER))?.invitedByBusinessId).toBeNull();
+  });
+
+  it('an unknown or malformed code is just the normal start', async () => {
+    const t = setup();
+    await t.command('/start co_nothinghere');
+    expect(t.lastText()).toContain('Share your number to begin');
+    await t.contact(USER);
+    expect((await t.people.byTelegramId(USER))?.invitedByBusinessId).toBeNull();
+  });
+});

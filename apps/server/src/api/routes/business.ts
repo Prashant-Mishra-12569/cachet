@@ -6,6 +6,7 @@ import type { AuthService } from '../../auth/service';
 import { ProofError, type CompanyProofService } from '../../business/company-proof';
 import type { BusinessRecord, BusinessRepo } from '../../business/repo';
 import { parseRange, type Dashboard } from '../../business/dashboard';
+import { ApiKeyError, type ApiKeys } from '../../business/api-keys';
 import type { KvStore } from '../../infra/kv';
 import { VerifierError } from '../../verify/verifier-client';
 import { apiError } from '../errors';
@@ -22,6 +23,8 @@ export interface BusinessRouteDeps {
   trustProxy: boolean;
   /** The company dashboard and compliance exports. */
   dashboard?: Dashboard;
+  /** Read-only API keys for the company's own systems. */
+  apiKeys?: ApiKeys;
   /** Risk scoring: the company's own report numbers, shown on its dashboard. */
   riskStatus?: {
     status(
@@ -159,6 +162,7 @@ export function businessRoutes(deps: BusinessRouteDeps) {
   });
 
   if (deps.dashboard) dashboardRoutes(app, deps, deps.dashboard);
+  if (deps.apiKeys) apiKeyRoutes(app, deps, deps.apiKeys);
 
   return app;
 }
@@ -199,6 +203,15 @@ function dashboardRoutes(app: Hono<SessionEnv>, deps: BusinessRouteDeps, dashboa
     return c.json(await dashboard.calls(b.id, range, c.req.query('cursor'), limit));
   });
 
+  /** The company's customer invite: its code (for t.me/<bot>?start=co_<code>) and how many joined. */
+  app.get('/invite', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    const [code, joined] = await Promise.all([deps.repo.inviteCodeFor(b.id), dashboard.invited(b.id)]);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ code, joined });
+  });
+
   app.get('/dashboard/payments', async (c) => {
     const b = await company(c.var.account);
     if (!b) return apiError(c, 'business_not_verified');
@@ -235,5 +248,56 @@ function dashboardRoutes(app: Hono<SessionEnv>, deps: BusinessRouteDeps, dashboa
     if (!range) return apiError(c, 'invalid_range');
     c.header('Cache-Control', 'no-store');
     return c.json(await dashboard.compliance(b, range));
+  });
+}
+
+const NewKeyBody = z.object({ name: z.string().trim().min(1).max(60) }).strict();
+
+/** /v1/business/api-keys: the signed-in company makes, lists and revokes its read-only keys. */
+function apiKeyRoutes(app: Hono<SessionEnv>, deps: BusinessRouteDeps, keys: ApiKeys) {
+  const company = async (account: string) => deps.repo.findByAccount(account);
+
+  app.get('/api-keys', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    c.header('Cache-Control', 'no-store');
+    return c.json({ apiKeys: await keys.list(b.id) });
+  });
+
+  app.post(
+    '/api-keys',
+    rateLimit({
+      kv: deps.kv,
+      name: 'api-key-create',
+      limit: 20,
+      windowSeconds: 3600,
+      trustProxy: deps.trustProxy,
+      byAccount: true,
+    }),
+    async (c) => {
+      const body = NewKeyBody.safeParse(await c.req.json().catch(() => null));
+      if (!body.success) return apiError(c, 'invalid_request');
+      const b = await company(c.var.account);
+      if (!b || b.status !== 'active') return apiError(c, 'business_not_verified');
+      try {
+        c.header('Cache-Control', 'no-store');
+        return c.json(await keys.create(b.id, body.data.name), 201);
+      } catch (err) {
+        if (err instanceof ApiKeyError) return apiError(c, err.code);
+        throw err;
+      }
+    },
+  );
+
+  app.post('/api-keys/:id/revoke', async (c) => {
+    const b = await company(c.var.account);
+    if (!b) return apiError(c, 'business_not_verified');
+    try {
+      await keys.revoke(b.id, c.req.param('id'));
+      return c.json({ revoked: true });
+    } catch (err) {
+      if (err instanceof ApiKeyError) return apiError(c, err.code);
+      throw err;
+    }
   });
 }

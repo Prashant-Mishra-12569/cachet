@@ -8,6 +8,8 @@ export interface NewPerson {
   phoneHash: string;
   phoneEnc: string;
   lang: string;
+  /** The company whose invite link brought them (set only when they first join). */
+  invitedByBusinessId?: string | null;
 }
 
 export interface PeopleRepo {
@@ -97,6 +99,7 @@ export function createMemoryPeopleRepo(): PeopleRepo & { rows: Map<number, Perso
         createdAt: existing?.createdAt ?? new Date(),
         updatedAt: new Date(),
         ...input,
+        invitedByBusinessId: existing ? existing.invitedByBusinessId : (input.invitedByBusinessId ?? null),
       };
       rows.set(input.tgUserId, row);
       return row;

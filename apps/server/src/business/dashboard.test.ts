@@ -156,6 +156,7 @@ function fakeSource(over: Partial<DashboardSource> = {}): DashboardSource {
     reports: async () => [],
     credits: async () => 140,
     impersonations: async () => 2,
+    invited: async () => 3,
     recorded: async () => ({ sealed: 72, inRecord: 72 }),
     calls: async () => [call()],
     records: async () => [{ txHash: TX, status: 'finalized', items: 6, finalizedAt: NOW }],

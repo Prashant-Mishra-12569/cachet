@@ -22,6 +22,7 @@ import { createApp } from './app';
 import type { Dashboard } from '../business/dashboard';
 import { createCompanyDirectory } from '../business/companies';
 import { createRiskEngine } from '../business/risk';
+import type { ApiKeys } from '../business/api-keys';
 import { createMemoryReportsRepo } from '../bot/reports-repo';
 
 export const WEB_ORIGIN = 'http://localhost:3000';
@@ -117,6 +118,8 @@ export function makeTestApp(
     verifyAgentMessage?: VerifyMessage;
     /** Company dashboard (/v1/business/dashboard/*). Absent = routes not mounted. */
     dashboard?: Dashboard;
+    /** Read-only API keys + data API. */
+    apiKeys?: ApiKeys;
     /** Web3 ID credential checker for the seal service. Absent = credentials off. */
     credentials?: Parameters<typeof createSealService>[0]['credentials'];
   } = {},
@@ -310,6 +313,7 @@ export function makeTestApp(
       risk,
     },
     ...(options.dashboard ? { dashboard: options.dashboard } : {}),
+    ...(options.apiKeys ? { apiKeys: options.apiKeys } : {}),
     riskStatus: risk,
     companies: createCompanyDirectory({
       businesses: repo,

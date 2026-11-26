@@ -156,6 +156,8 @@ export interface DashboardSource {
     limit: number,
   ): Promise<{ sealId: string; reason: string; createdAt: Date }[]>;
   credits(businessId: string): Promise<number>;
+  /** People who joined Cachet through this company's invite link (a count, nothing else). */
+  invited(businessId: string): Promise<number>;
   /** Reports where a person said a scam caller pretended to be this company. */
   impersonations(businessId: string, from: Date, to?: Date): Promise<number>;
   recorded(businessId: string): Promise<{ sealed: number; inRecord: number }>;
@@ -261,6 +263,13 @@ export function createDashboardSource(db: Db): DashboardSource {
         reason: String(x['reason']),
         createdAt: new Date(String(x['created_at'])),
       }));
+    },
+
+    async invited(b) {
+      const [r = {}] = await rows(
+        sql`select count(*) as n from people where invited_by_business_id = ${b}::uuid`,
+      );
+      return n(r['n']);
     },
 
     async impersonations(b, from, to) {
@@ -491,6 +500,9 @@ export function createDashboard(deps: DashboardDeps) {
         next: rowsOut.length > limit && last ? encodeCursor(last.issuedAt, last.id) : null,
       };
     },
+
+    /** How many customers joined through the company's invite link. */
+    invited: (businessId: string) => deps.source.invited(businessId),
 
     async payments(businessId: string) {
       const list = await deps.source.payments(businessId, null, 200);

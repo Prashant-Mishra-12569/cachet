@@ -37,6 +37,15 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
       "This account doesn't have a verified company identity. Use an account created with your company identity (Global FinReg).",
   },
   business_not_verified: { status: 403, message: 'Prove your company first, then add your AI caller.' },
+  api_key_invalid: {
+    status: 401,
+    message: 'This API key is not valid or was revoked. Use "Authorization: Bearer cachet_ro_…".',
+  },
+  too_many_api_keys: {
+    status: 409,
+    message: 'You have 10 active API keys. Revoke one before making another.',
+  },
+  api_key_not_found: { status: 404, message: "We couldn't find this API key." },
   invalid_range: {
     status: 400,
     message: 'Choose a period of up to one year, with the start before the end.',
