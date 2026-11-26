@@ -155,7 +155,7 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
       await ctx.reply(copy.tooManyChecks);
       return;
     }
-    await deps.reports.create(
+    const created = await deps.reports.create(
       {
         personId: person.id,
         phoneHash: person.phoneHash,
@@ -165,6 +165,18 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
       },
       new Date(now()),
     );
+    await ctx.editMessageReplyMarkup().catch(() => undefined);
+    // Ask who the caller claimed to be (10 minutes to answer). Their answer powers the "never calls"
+    // warning, the guardian's alert and the company's "scam calls using your name" count.
+    await deps.kv.set(`bot:claim:${ctx.from.id}`, created.id, 600);
+    await ctx.reply(copy.reportAskWho, {
+      reply_markup: new InlineKeyboard().text(copy.claimSkip, 'claim:skip'),
+    });
+  });
+
+  bot.callbackQuery('claim:skip', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await deps.kv.take(`bot:claim:${ctx.from.id}`);
     await ctx.editMessageReplyMarkup().catch(() => undefined);
     await ctx.reply(copy.reported);
   });
@@ -187,6 +199,34 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
   bot.callbackQuery('stop:no', async (ctx) => {
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(copy.stopKept).catch(() => ctx.reply(copy.stopKept));
+  });
+
+  // The answer to "Who did the caller say they were?" (only while that question is open).
+  // Registered after every command, so commands always win.
+  bot.on('message:text', async (ctx, next) => {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) return next();
+    const reportId = await deps.kv.take(`bot:claim:${ctx.from.id}`);
+    if (!reportId) return next();
+    const person = await deps.people.byTelegramId(ctx.from.id);
+    if (!person) return;
+    const claimed = cleanClaimedName(text);
+    if (!claimed) {
+      await ctx.reply(copy.reported);
+      return;
+    }
+    const candidates = (await deps.businesses.searchByName(claimed, 5)).filter((b) => b.status === 'active');
+    const match = matchClaimedCompany(claimed, candidates);
+    await deps.reports.claim(reportId, person.id, claimed, match?.id ?? null);
+    const reply = !match
+      ? copy.claimUnknown(claimed)
+      : match.neverCalls
+        ? copy.claimNeverCalls(match.legalName)
+        : copy.claimVerifiedNotCalling(match.legalName);
+    await ctx.reply(reply, { parse_mode: 'HTML' });
+    await family
+      .alertGuardiansClaimed(bot, person, match?.legalName ?? claimed)
+      .catch((err: unknown) => console.error('[bot] guardian alert failed', err));
   });
 
   bot.catch((err) => {
@@ -238,4 +278,43 @@ export async function startBotPolling(
       conflict ? '' : err,
     );
   });
+}
+
+/** A company name typed by a person: one line, no control characters, at most 60 characters. */
+export function cleanClaimedName(text: string): string | null {
+  const one = text
+    // Deliberately matches control and invisible direction characters, to remove them from typed text.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (one.length < 2) return null;
+  return one.length > 60 ? one.slice(0, 60).trim() : one;
+}
+
+const COMPANY_SUFFIX =
+  /\b(b\.?v\.?|n\.?v\.?|ltd|limited|inc|llc|plc|gmbh|ag|s\.?a\.?|pvt|private|co|corp)\b\.?/g;
+const normalizeCompany = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(COMPANY_SUFFIX, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+/**
+ * Which verified company the caller pretended to be. Exact name (ignoring case, punctuation and
+ * "BV/Ltd/Inc…") wins; otherwise only a single candidate that starts with the typed name. Anything
+ * ambiguous ("Bank" matching several) is no match: never guess the wrong company.
+ */
+export function matchClaimedCompany<T extends { legalName: string }>(
+  typed: string,
+  candidates: T[],
+): T | null {
+  const q = normalizeCompany(typed);
+  if (!q) return null;
+  const exact = candidates.filter((c) => normalizeCompany(c.legalName) === q);
+  if (exact.length === 1) return exact[0] ?? null;
+  if (exact.length > 1) return null;
+  const starts = candidates.filter((c) => normalizeCompany(c.legalName).startsWith(`${q} `));
+  return starts.length === 1 ? (starts[0] ?? null) : null;
 }

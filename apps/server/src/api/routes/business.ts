@@ -22,7 +22,11 @@ export interface BusinessRouteDeps {
   trustProxy: boolean;
   /** The company dashboard and compliance exports. */
   dashboard?: Dashboard;
+  /** The company's AI callers (a "never calls" company may not have a live one). */
+  agents: { list(account: string): Promise<{ status: string }[]> };
 }
+
+const NeverCallsBody = z.object({ neverCalls: z.boolean() }).strict();
 
 const VerifyBody = z.object({
   proofId: z.string().min(1).max(100),
@@ -125,6 +129,28 @@ export function businessRoutes(deps: BusinessRouteDeps) {
       }
     },
   );
+
+  /**
+   * "We never make AI calls": any call claiming to be this company is then shown as a scam.
+   * Not allowed while the company has an AI caller that is registered or live.
+   */
+  app.post('/never-calls', async (c) => {
+    const body = NeverCallsBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return apiError(c, 'invalid_request');
+    const business = await deps.repo.findByAccount(c.var.account);
+    if (!business || business.status !== 'active') return apiError(c, 'business_not_verified');
+    if (body.data.neverCalls) {
+      const live = (await deps.agents.list(c.var.account)).some(
+        (a) => a.status === 'active' || a.status === 'registered',
+      );
+      if (live) return apiError(c, 'never_calls_has_ai_caller');
+    }
+    if (business.neverCalls === body.data.neverCalls) {
+      return c.json({ business: toView(business, deps.network) }); // no change, no new record
+    }
+    const updated = await deps.repo.setNeverCalls(business.id, body.data.neverCalls, new Date());
+    return c.json({ business: toView(updated, deps.network) });
+  });
 
   if (deps.dashboard) dashboardRoutes(app, deps, deps.dashboard);
 

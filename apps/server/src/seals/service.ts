@@ -63,6 +63,7 @@ export type SealErrorCode =
   | 'agent_revoked'
   | 'agent_card_mismatch'
   | 'business_suspended'
+  | 'company_never_calls'
   | 'number_not_allowed'
   | 'purpose_not_allowed'
   | 'message_not_allowed'
@@ -170,6 +171,8 @@ export function createSealService(deps: SealServiceDeps) {
     if (agent.agentAccount !== agentAccount) throw new SealError('agent_account_mismatch');
     const business = await deps.businesses.findById(agent.businessId);
     if (!business || business.status !== 'active') throw new SealError('business_suspended');
+    // It told people it never makes AI calls: a seal would contradict that.
+    if (business.neverCalls) throw new SealError('company_never_calls');
 
     const onChain = await liveAgent(agent.tokenId);
     if (!onChain || onChain.status !== 'Active') throw new SealError('agent_revoked', 'not active on chain');

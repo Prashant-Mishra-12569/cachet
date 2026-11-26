@@ -64,6 +64,20 @@ export function createFamilyFeature(deps: FamilyDeps) {
     );
   }
 
+  /** Follow-up alert once the ward says who the caller claimed to be (same no-storm limit). */
+  async function alertGuardiansClaimed(bot: Bot, ward: PersonRow, claimed: string) {
+    const window = Math.floor(deps.now() / 600_000);
+    if ((await deps.kv.incr(`bot:rl:alert:${ward.id}:${window}`, 600)) > 3) return;
+    const links = (await deps.family.linksOf(ward.id)).filter((l) => l.wardPersonId === ward.id);
+    await Promise.allSettled(
+      links.map((l) =>
+        bot.api.sendMessage(l.guardianChatId, copy.guardianAlertClaimed(l.wardLabel, claimed), {
+          parse_mode: 'HTML',
+        }),
+      ),
+    );
+  }
+
   function register(bot: Bot) {
     bot.command('family', async (ctx) => {
       const person = await me(ctx);
@@ -172,7 +186,7 @@ export function createFamilyFeature(deps: FamilyDeps) {
     });
   }
 
-  return { register, openInvite, alertGuardians };
+  return { register, openInvite, alertGuardians, alertGuardiansClaimed };
 }
 
 export type FamilyFeature = ReturnType<typeof createFamilyFeature>;

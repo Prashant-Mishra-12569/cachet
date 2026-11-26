@@ -12,6 +12,7 @@ export type AgentErrorCode =
   | 'agent_wrong_state'
   | 'number_in_use'
   | 'too_many_agents'
+  | 'company_never_calls'
   | 'tx_already_used'
   | 'tx_mismatch'
   | 'card_host_unavailable'
@@ -164,6 +165,7 @@ export function createAgentService(deps: AgentServiceDeps) {
 
     async create(account: string, input: NewAgent) {
       const business = await businessOf(account);
+      if (business.neverCalls) throw new AgentError('company_never_calls');
       const existing = await deps.agents.listByBusiness(business.id);
       if (existing.filter((a) => a.status !== 'revoked').length >= maxAgents) {
         throw new AgentError('too_many_agents');

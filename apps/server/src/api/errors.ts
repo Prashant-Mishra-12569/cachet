@@ -95,6 +95,14 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     message: "The Agent Card pinned on Concordium doesn't match Cachet's record.",
   },
   business_suspended: { status: 403, message: 'This company is suspended in Cachet.' },
+  company_never_calls: {
+    status: 403,
+    message: 'This company told people it never makes AI calls. Turn that off in Setup before sealing calls.',
+  },
+  never_calls_has_ai_caller: {
+    status: 409,
+    message: 'You have an AI caller that is live. Switch it off before saying you never make AI calls.',
+  },
   number_not_allowed: { status: 400, message: "This calling number isn't registered for this AI caller." },
   purpose_not_allowed: { status: 400, message: "This purpose isn't registered for this AI caller." },
   message_not_allowed: {

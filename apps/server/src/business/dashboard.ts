@@ -156,6 +156,8 @@ export interface DashboardSource {
     limit: number,
   ): Promise<{ sealId: string; reason: string; createdAt: Date }[]>;
   credits(businessId: string): Promise<number>;
+  /** Reports where a person said a scam caller pretended to be this company. */
+  impersonations(businessId: string, from: Date, to?: Date): Promise<number>;
   recorded(businessId: string): Promise<{ sealed: number; inRecord: number }>;
   calls(
     businessId: string,
@@ -259,6 +261,14 @@ export function createDashboardSource(db: Db): DashboardSource {
         reason: String(x['reason']),
         createdAt: new Date(String(x['created_at'])),
       }));
+    },
+
+    async impersonations(b, from, to) {
+      const [r = {}] = await rows(sql`
+        select count(*) as n from reports
+        where claimed_business_id = ${b}::uuid and created_at >= ${iso(from)}::timestamptz
+          ${to ? sql`and created_at < ${iso(to)}::timestamptz` : sql``}`);
+      return n(r['n']);
     },
 
     async credits(b) {
@@ -427,7 +437,7 @@ export function createDashboard(deps: DashboardDeps) {
       const at = now();
       const since30 = new Date(at.getTime() - 30 * 86_400_000);
       const since14 = new Date(at.getTime() - 14 * 86_400_000);
-      const [counts, perDay, payments, consents, reports, credits, recorded, agents, last14] =
+      const [counts, perDay, payments, consents, reports, credits, recorded, agents, last14, impersonations] =
         await Promise.all([
           deps.source.counts(businessId, since30, at, at),
           deps.source.perDay(businessId, 14, at),
@@ -438,6 +448,7 @@ export function createDashboard(deps: DashboardDeps) {
           deps.source.recorded(businessId),
           deps.source.agents(businessId),
           deps.source.counts(businessId, since14, at, at),
+          deps.source.impersonations(businessId, since30),
         ]);
       const collected = new Map<string, number>();
       for (const p of payments) collected.set(p.asset, (collected.get(p.asset) ?? 0) + Number(p.amount));
@@ -452,7 +463,7 @@ export function createDashboard(deps: DashboardDeps) {
           collected: [...collected].map(([asset, total]) => ({ asset, total: total.toFixed(2) })),
         },
         consents,
-        reports: { count: reports.length },
+        reports: { count: reports.length, impersonations },
         credits: {
           left: credits,
           // At the last 14 days' pace. Null when there were no calls (nothing to project from).
@@ -519,15 +530,18 @@ export function createDashboard(deps: DashboardDeps) {
       range: { from: Date; to: Date },
     ) {
       const at = now();
-      const [counts, consents, records, agents, calls, reports, payments] = await Promise.all([
-        deps.source.counts(business.id, range.from, range.to, at),
-        deps.source.consents(business.id),
-        deps.source.records(business.id, range),
-        deps.source.agents(business.id),
-        deps.source.calls(business.id, range, null, REPORT_CALL_LIMIT + 1),
-        deps.source.reports(business.id, range.from, 1000),
-        deps.source.payments(business.id, range.from, 5000),
-      ]);
+      const [counts, consents, records, agents, calls, reports, payments, impersonations] = await Promise.all(
+        [
+          deps.source.counts(business.id, range.from, range.to, at),
+          deps.source.consents(business.id),
+          deps.source.records(business.id, range),
+          deps.source.agents(business.id),
+          deps.source.calls(business.id, range, null, REPORT_CALL_LIMIT + 1),
+          deps.source.reports(business.id, range.from, 1000),
+          deps.source.payments(business.id, range.from, 5000),
+          deps.source.impersonations(business.id, range.from, range.to),
+        ],
+      );
       const inRange = (d: Date) => d >= range.from && d < range.to;
       return {
         network: deps.network,
@@ -548,6 +562,7 @@ export function createDashboard(deps: DashboardDeps) {
         totals: { ...counts, pickupRate: pickupRate(counts) },
         consents,
         reports: reports.filter((r) => inRange(r.createdAt)).length,
+        impersonations,
         payments: payments.filter((p) => inRange(p.paidAt)).length,
         records: records.map((r) => ({
           ...r,

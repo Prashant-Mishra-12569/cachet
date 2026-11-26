@@ -1,4 +1,5 @@
-import { businesses, eq, sql, type Db } from '@cachet/db';
+import { businesses, eq, ledgerItems, sql, type Db } from '@cachet/db';
+import { canonicalize, sha256Hex } from '@cachet/shared/seal';
 
 export interface BusinessRecord {
   id: string;
@@ -30,7 +31,18 @@ export interface BusinessRepo {
   searchByName(query: string, limit: number): Promise<BusinessRecord[]>;
   /** Create the business, or refresh its proven details if it proves again. */
   upsertVerified(input: VerifiedCompanyInput): Promise<BusinessRecord>;
+  /**
+   * "We never make AI calls" on/off. The change goes into the permanent record (a ledger item,
+   * anchored on chain later), so a company can't quietly deny it said so.
+   */
+  setNeverCalls(id: string, neverCalls: boolean, now: Date): Promise<BusinessRecord>;
 }
+
+/** What gets anchored for a "never calls" change: a hash of the declaration, nothing personal. */
+export const neverCallsLedgerHash = (id: string, neverCalls: boolean, at: Date) =>
+  sha256Hex(
+    canonicalize({ v: 'cachet-company-never-calls/1', businessId: id, neverCalls, at: at.toISOString() }),
+  );
 
 export function createBusinessRepo(db: Db): BusinessRepo {
   return {
@@ -77,6 +89,23 @@ export function createBusinessRepo(db: Db): BusinessRepo {
       if (!row) throw new Error('upsert returned no row');
       return row;
     },
+    async setNeverCalls(id, neverCalls, now) {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .update(businesses)
+          .set({ neverCalls, updatedAt: now })
+          .where(eq(businesses.id, id))
+          .returning();
+        const row = rows[0];
+        if (!row) throw new Error('business not found');
+        await tx.insert(ledgerItems).values({
+          kind: 'company_never_calls',
+          refId: id,
+          itemHash: neverCallsLedgerHash(id, neverCalls, now),
+        });
+        return row;
+      });
+    },
   };
 }
 
@@ -100,6 +129,13 @@ export function createMemoryBusinessRepo(): BusinessRepo {
       };
       byAccount.set(input.concordiumAccount, record);
       return record;
+    },
+    async setNeverCalls(id, neverCalls) {
+      const b = [...byAccount.values()].find((x) => x.id === id);
+      if (!b) throw new Error('business not found');
+      const next = { ...b, neverCalls };
+      byAccount.set(b.concordiumAccount, next);
+      return next;
     },
   };
 }

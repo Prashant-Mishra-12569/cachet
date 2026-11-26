@@ -53,6 +53,16 @@ export const copy = {
     "⚠️ <b>Not verified</b>\nNo verified company is calling you right now.\nDon't pay. Don't share OTPs. Hang up.",
   reportButton: 'Report this call',
   reported: "Thanks. Your report is saved. Stay safe: don't pay and don't share codes.",
+  // After a report: who did the caller pretend to be? (powers "never calls" and "scam calls using your name")
+  reportAskWho:
+    'Thanks, your report is saved.\nWho did the caller say they were? Send the company name, or tap Skip.',
+  claimSkip: 'Skip',
+  claimNeverCalls: (name: string) =>
+    `⚠️ <b>${esc(name)}</b> has told Cachet it never makes AI calls.\nThis call is a scam. Hang up.`,
+  claimVerifiedNotCalling: (name: string) =>
+    `⚠️ <b>${esc(name)}</b> is a verified company, but it has no verified call to you right now.\nThis call is a scam. Hang up, and contact them only through their official app or website.`,
+  claimUnknown: (name: string) =>
+    `⚠️ No verified company called "${esc(name)}" is calling you.\nTreat this call as a scam. Don't pay and don't share codes.`,
   tooManyChecks: 'Too many checks in a short time. Please wait a few minutes.',
 
   help: [
@@ -110,6 +120,8 @@ export const copy = {
   familyWardLeft: (label: string) => `<b>${esc(label)}</b> stopped sharing call alerts with you.`,
   guardianAlert: (label: string) =>
     `⚠️ <b>${esc(label)}</b> just checked a call that is NOT verified.\nYou may want to call them now.`,
+  guardianAlertClaimed: (label: string, claimed: string) =>
+    `⚠️ <b>${esc(label)}</b> is on an unverified call claiming to be "${esc(claimed)}".\nYou may want to call them now.`,
 
   // /history
   historyEmpty: 'No sealed calls yet.',

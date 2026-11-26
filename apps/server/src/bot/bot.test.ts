@@ -132,6 +132,8 @@ function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
         entities: [{ type: 'bot_command', offset: 0, length: text.split(' ')[0]?.length ?? text.length }],
       },
     });
+  /** A plain text message (not a command), as a person typing an answer. */
+  const say = (text: string, as = USER) => send({ message: { ...base('private', as), text } });
   const contact = (userId: number, phone = '919336124858', as = USER) =>
     send({
       message: { ...base('private', as), contact: { phone_number: phone, first_name: 'P', user_id: userId } },
@@ -201,6 +203,7 @@ function setup(webOrigin = 'http://localhost:3000', miniAppUrl?: string) {
     sent,
     lastText,
     command,
+    say,
     contact,
     tap,
     people,
@@ -337,7 +340,8 @@ describe('/check ("Is this call real?")', () => {
       reason: 'unverified_call',
       phoneHash: phoneHash(PEPPER, NUMBER),
     });
-    expect(t.lastText()).toContain('Your report is saved');
+    expect(t.lastText()).toMatch(/your report is saved/i);
+    expect(t.lastText()).toContain('Who did the caller say they were?');
   });
 });
 
@@ -951,5 +955,109 @@ describe('/consent: who may call me', () => {
     await t.contact(USER);
     await t.command('/consent');
     expect(t.lastText()).toContain('No company has sealed a call to you yet');
+  });
+});
+
+describe('Report: who did the caller pretend to be?', () => {
+  async function company(
+    t: ReturnType<typeof setup>,
+    legalName: string,
+    account: string,
+    neverCalls = false,
+  ) {
+    const b = await t.businesses.upsertVerified({
+      concordiumAccount: account,
+      legalName,
+      legalCountry: 'NL',
+      issuer: 'did:ccd:testnet:idp:4',
+      proofTx: 'aa'.repeat(32),
+      requestTx: 'bb'.repeat(32),
+      verifiedAt: new Date('2026-11-19T10:00:00Z'),
+    });
+    return neverCalls ? t.businesses.setNeverCalls(b.id, true, new Date()) : b;
+  }
+  async function reported(t: ReturnType<typeof setup>) {
+    await t.contact(USER);
+    await t.command('/check');
+    await t.tap('report');
+  }
+
+  it('a company that never calls: the special scam warning, and the report is linked to it', async () => {
+    const t = setup();
+    const demo = await company(t, 'Demo Exchange', 'acct-demo', true);
+    await reported(t);
+    await t.say('demo exchange');
+    expect(t.lastText()).toBe(
+      '⚠️ <b>Demo Exchange</b> has told Cachet it never makes AI calls.\nThis call is a scam. Hang up.',
+    );
+    expect(t.reports.rows[0]).toMatchObject({ claimedCompany: 'demo exchange', claimedBusinessId: demo.id });
+  });
+
+  it('a verified company with no seal right now: still a scam, contact them the official way', async () => {
+    const t = setup();
+    const nw = await company(t, 'Northwind Energy BV', 'acct-nw');
+    await reported(t);
+    await t.say('Northwind');
+    expect(t.lastText()).toContain(
+      '<b>Northwind Energy BV</b> is a verified company, but it has no verified call',
+    );
+    expect(t.reports.rows[0]?.claimedBusinessId).toBe(nw.id);
+  });
+
+  it('an unknown name: treat it as a scam, and the name is escaped (no HTML injection)', async () => {
+    const t = setup();
+    await reported(t);
+    await t.say('<b>SBI</b> Bank');
+    expect(t.lastText()).toContain('No verified company called "&lt;b&gt;SBI&lt;/b&gt; Bank" is calling you');
+    expect(t.reports.rows[0]).toMatchObject({ claimedCompany: '<b>SBI</b> Bank', claimedBusinessId: null });
+  });
+
+  it('never guesses between two companies ("Bank" matching several is no match)', async () => {
+    const t = setup();
+    await company(t, 'Saffron Bank', 'acct-1');
+    await company(t, 'Indigo Bank', 'acct-2');
+    await reported(t);
+    await t.say('Bank');
+    expect(t.lastText()).toContain('No verified company called "Bank"');
+    expect(t.reports.rows[0]?.claimedBusinessId).toBeNull();
+  });
+
+  it('Skip, and later text is not taken as an answer; one answer per report', async () => {
+    const t = setup();
+    await reported(t);
+    await t.tap('claim:skip');
+    expect(t.lastText()).toContain('Your report is saved');
+    const before = t.sent().length;
+    await t.say('Demo Exchange');
+    expect(t.sent().length).toBe(before); // nothing asked any more, so no reply
+    expect(t.reports.rows[0]?.claimedCompany).toBeNull();
+  });
+
+  it('the question closes after 10 minutes', async () => {
+    const t = setup();
+    await reported(t);
+    t.clock.t += 10 * 60_000 + 1;
+    await t.say('Demo Exchange');
+    expect(t.reports.rows[0]?.claimedCompany).toBeNull();
+  });
+
+  it('commands still work while the question is open', async () => {
+    const t = setup();
+    await reported(t);
+    await t.command('/help');
+    expect(t.lastText()).toContain('/check');
+    expect(t.reports.rows[0]?.claimedCompany).toBeNull();
+  });
+
+  it('tells the guardian who the caller pretended to be', async () => {
+    const t = setup();
+    await company(t, 'Demo Exchange', 'acct-demo', true);
+    await momAccepts(t, await invite(t));
+    await t.command('/check', 'private', MOM, 'Mom');
+    await t.tap('report', MOM);
+    await t.say('Demo Exchange', MOM);
+    expect(t.to(USER).at(-1)).toBe(
+      '⚠️ <b>Mom</b> is on an unverified call claiming to be "Demo Exchange".\nYou may want to call them now.',
+    );
   });
 });
