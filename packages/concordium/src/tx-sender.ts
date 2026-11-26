@@ -1,6 +1,13 @@
 import {
   AccountAddress,
+  CcdAmount,
+  ContractAddress,
   DataBlob,
+  Energy,
+  ModuleReference,
+  ContractName,
+  type Parameter,
+  type ReceiveName,
   Transaction,
   TransactionExpiry,
   TransactionHash,
@@ -20,6 +27,20 @@ export interface TxSender {
   readonly address: string;
   /** Submit a RegisterData transaction (max 256 bytes). Returns the transaction hash (hex). */
   registerData(data: Uint8Array): Promise<string>;
+  /** Create a smart contract instance from a module already on chain. Returns the transaction hash. */
+  initContract(input: {
+    moduleRef: string;
+    contractName: string;
+    parameter: Parameter.Type;
+    energy: bigint;
+  }): Promise<string>;
+  /** Call a smart contract entrypoint (no CCD sent). Returns the transaction hash. */
+  updateContract(input: {
+    contract: { index: bigint; subindex: bigint };
+    receiveName: ReceiveName.Type;
+    parameter: Parameter.Type;
+    energy: bigint;
+  }): Promise<string>;
   /** Wait until the transaction is finalized. */
   waitForFinal(txHash: string, timeoutMs?: number): Promise<BlockItemSummaryInBlock>;
 }
@@ -55,6 +76,44 @@ export function createTxSender(input: {
         const finalized = await Transaction.signAndFinalize(tx, input.signer);
         const hash = await input.client.sendTransaction(finalized);
         return TransactionHash.toHexString(hash);
+      });
+    },
+
+    initContract({ moduleRef, contractName, parameter, energy }) {
+      return serialized(async () => {
+        const { nonce } = await input.client.getNextAccountNonce(sender);
+        const tx = Transaction.initContract(
+          {
+            amount: CcdAmount.zero(),
+            moduleRef: ModuleReference.fromHexString(moduleRef),
+            initName: ContractName.fromString(contractName),
+            param: parameter,
+          },
+          Energy.create(energy),
+        )
+          .addMetadata({ sender, nonce, expiry: TransactionExpiry.futureMinutes(10) })
+          .build();
+        const finalized = await Transaction.signAndFinalize(tx, input.signer);
+        return TransactionHash.toHexString(await input.client.sendTransaction(finalized));
+      });
+    },
+
+    updateContract({ contract, receiveName, parameter, energy }) {
+      return serialized(async () => {
+        const { nonce } = await input.client.getNextAccountNonce(sender);
+        const tx = Transaction.updateContract(
+          {
+            amount: CcdAmount.zero(),
+            address: ContractAddress.create(contract.index, contract.subindex),
+            receiveName,
+            message: parameter,
+          },
+          Energy.create(energy),
+        )
+          .addMetadata({ sender, nonce, expiry: TransactionExpiry.futureMinutes(10) })
+          .build();
+        const finalized = await Transaction.signAndFinalize(tx, input.signer);
+        return TransactionHash.toHexString(await input.client.sendTransaction(finalized));
       });
     },
 

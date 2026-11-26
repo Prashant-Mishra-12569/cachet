@@ -83,6 +83,12 @@ function fakeSender(mode: { submit?: 'ok' | 'throw'; outcome?: 'registerData' | 
       sent.push(data);
       return 'a'.repeat(63) + String(sent.length);
     },
+    initContract: async () => {
+      throw new Error('not used by anchoring');
+    },
+    updateContract: async () => {
+      throw new Error('not used by anchoring');
+    },
     async waitForFinal() {
       return {
         blockHash: { toString: () => 'b'.repeat(64) },

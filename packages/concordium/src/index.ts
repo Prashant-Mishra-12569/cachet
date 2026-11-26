@@ -8,3 +8,4 @@ export * from './registry-events';
 export * from './registry-chain';
 export * from './tx-sender';
 export * from './payments';
+export * from './credential-registry';
