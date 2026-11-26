@@ -6,6 +6,7 @@ import { WaxSeal } from '@/components/brand/Seal';
 import { LocalTime } from '@/components/LocalTime';
 import { ErrorCard, Skeleton, useTgData } from '@/components/tg/TelegramShell';
 import { CodeDigits, SafetyNote, SectionTitle, StatusPill } from '@/components/tg/ui';
+import { ReportSealedCall } from '@/components/tg/ReportSealedCall';
 import { countryName } from '@/lib/format';
 import { PURPOSES, money, type TgSeal } from '@/lib/tg-types';
 
@@ -163,6 +164,8 @@ export default function TelegramSeal({ params }: { params: Promise<{ sealId: str
           </Check>
         </ul>
       </section>
+
+      <ReportSealedCall sealId={seal.id} />
 
       <Link
         href="/tg"

@@ -16,6 +16,19 @@ export function Overview({ business, summary }: { business: BusinessView; summar
 
   return (
     <div className="flex flex-col gap-5">
+      {summary.company.status === 'suspended' ? (
+        <section
+          role="alert"
+          className="rounded-[20px] border border-alert/30 bg-alert-soft p-5 text-alert sm:p-6"
+        >
+          <p className="text-lg font-semibold">Your company is suspended</p>
+          <p className="mt-1 text-[15px]">
+            Your calls are not verified right now: Cachet refuses new seals and has revoked your AI
+            caller&apos;s credential. This happens automatically when many different people report your sealed
+            calls. Contact Cachet to have it reviewed.
+          </p>
+        </section>
+      ) : null}
       {/* who you are, as people see it */}
       <section className={`${card} grid gap-5 sm:grid-cols-2`} aria-label="Your verified identity">
         <div>
@@ -98,7 +111,14 @@ export function Overview({ business, summary }: { business: BusinessView; summar
         <CallsChart days={summary.perDay} />
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {summary.risk ? (
+          <Stat
+            label={`People who reported your calls, ${summary.risk.windowDays} days`}
+            value={nf.format(summary.risk.reporters)}
+            note={`Automatic suspension at ${summary.risk.suspendAt} people (of ${summary.risk.called} you called).`}
+          />
+        ) : null}
         <Stat
           label="People who blocked you"
           value={nf.format(summary.consents.revoked)}

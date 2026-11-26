@@ -43,6 +43,9 @@ export interface Summary {
   record: { sealed: number; inRecord: number };
   agents: DashAgent[];
   generatedAt: string;
+  company: { status: 'active' | 'suspended' };
+  /** Risk scoring: people who reported this company's sealed calls (look-back window). */
+  risk: { reporters: number; called: number; suspendAt: number; windowDays: number } | null;
 }
 
 export interface DashCall {
