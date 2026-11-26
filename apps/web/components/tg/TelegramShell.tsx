@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { BOT_USERNAME, loadTelegram, type TelegramWebApp } from '@/lib/telegram';
+import { BOT_USERNAME, loadTelegram, paintTelegram, type TelegramWebApp } from '@/lib/telegram';
 import { CachetLogo } from '@/components/brand/Seal';
 
 type Shell =
@@ -31,6 +31,7 @@ export function TelegramShell({ children }: { children: ReactNode }) {
       }
       tg.ready();
       tg.expand();
+      paintTelegram(tg, tg.colorScheme);
       setScheme(tg.colorScheme);
       setShell({ state: 'ready', tg, initData: tg.initData });
     });
@@ -43,7 +44,10 @@ export function TelegramShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (shell.state !== 'ready') return;
     const tg = shell.tg;
-    const onTheme = () => setScheme(tg.colorScheme);
+    const onTheme = () => {
+      paintTelegram(tg, tg.colorScheme);
+      setScheme(tg.colorScheme);
+    };
     tg.onEvent('themeChanged', onTheme);
     return () => tg.offEvent('themeChanged', onTheme);
   }, [shell]);
@@ -142,7 +146,7 @@ export function ErrorCard({ error, onRetry }: { error: ApiError; onRetry?: () =>
         <button
           type="button"
           onClick={onRetry}
-          className="mt-4 rounded-full border border-line px-4 py-2 text-sm font-medium"
+          className="mt-4 min-h-11 rounded-full border border-line px-5 text-sm font-medium"
         >
           Try again
         </button>

@@ -16,7 +16,33 @@ export interface TelegramWebApp {
   onEvent(event: 'themeChanged', cb: () => void): void;
   offEvent(event: 'themeChanged', cb: () => void): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
-  HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void };
+  HapticFeedback?: {
+    notificationOccurred(type: 'error' | 'success' | 'warning'): void;
+    impactOccurred?(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): void;
+  };
+  /** Telegram's own top bar / background behind the app (Bot API 6.1+). */
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  /** Bottom bar colour (Bot API 7.10+). */
+  setBottomBarColor?(color: string): void;
+  isVersionAtLeast?(version: string): boolean;
+}
+
+/** Our brand colours for Telegram's own bars, so the app looks native in light and dark. */
+export const BRAND_BG = { light: '#FAF8F5', dark: '#121411' } as const;
+
+/** Paint Telegram's top bar and background in our colours (ignored on old Telegram versions). */
+export function paintTelegram(tg: TelegramWebApp, scheme: 'light' | 'dark') {
+  const color = BRAND_BG[scheme];
+  try {
+    if (tg.isVersionAtLeast?.('6.1') ?? true) {
+      tg.setHeaderColor?.(color);
+      tg.setBackgroundColor?.(color);
+    }
+    if (tg.isVersionAtLeast?.('7.10')) tg.setBottomBarColor?.(color);
+  } catch {
+    // Older Telegram apps: keep their default colours.
+  }
 }
 
 declare global {

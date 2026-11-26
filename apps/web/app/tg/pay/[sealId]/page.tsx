@@ -100,7 +100,7 @@ export default function TelegramPay({ params }: { params: Promise<{ sealId: stri
         <button
           type="button"
           onClick={() => void continueInBrowser()}
-          className="block rounded-full bg-seal px-5 py-3 text-center font-medium text-surface"
+          className="flex min-h-12 items-center justify-center rounded-full bg-seal px-5 text-center font-medium text-surface active:scale-[0.98]"
         >
           Continue in your browser to pay
         </button>

@@ -33,27 +33,43 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Telegram Mini App (/tg): follow Telegram's own light/dark colours (it sets --tg-theme-* on <html>).
-   The seal green stays ours: it means "verified" everywhere. */
+/* Telegram Mini App (/tg) and the browser pay page: the website's own brand, not Telegram's greys.
+   Light = the website. Dark (when Telegram is dark) = the same brand at night. Green always means
+   "verified", red always means "not verified". */
 .tg-app {
-  --color-bg: var(--tg-theme-secondary-bg-color, #faf8f5);
-  --color-surface: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
-  --color-ink: var(--tg-theme-text-color, #0e0e0c);
-  --color-ink-2: var(--tg-theme-hint-color, #5c5a55);
-  --color-line: var(--tg-theme-section-separator-color, #e9e5de);
+  --tg-wash: radial-gradient(38rem 22rem at 100% -8%, #e7e2ff 0%, rgb(231 226 255 / 0) 65%);
 }
 .tg-app[data-scheme='dark'] {
   color-scheme: dark;
+  --color-bg: #121411;
+  --color-surface: #1b1e1a;
+  --color-ink: #f3f0e9;
+  --color-ink-2: #a9a59c;
+  --color-line: #2b2f2a;
+  --color-night: #0c0d0b;
   --color-seal: #3fbf8f;
-  --color-seal-soft: color-mix(in srgb, #3fbf8f 16%, transparent);
-  --color-alert: #ff7a6b;
-  --color-alert-soft: color-mix(in srgb, #ff7a6b 16%, transparent);
+  --color-seal-soft: color-mix(in srgb, #3fbf8f 14%, transparent);
+  --color-alert: #ff8a7a;
+  --color-alert-soft: color-mix(in srgb, #ff8a7a 14%, transparent);
+  --color-lilac-soft: #1c1b26;
+  --tg-wash: radial-gradient(38rem 22rem at 100% -8%, rgb(63 191 143 / 0.14) 0%, rgb(63 191 143 / 0) 65%);
 }
-.tg-card {
-  border-radius: 18px;
-  border: 1px solid var(--color-line);
-  background: var(--color-surface);
-  padding: 1.25rem;
+.tg-app {
+  background: var(--tg-wash), var(--color-bg);
+  background-repeat: no-repeat;
+}
+/* In the components layer, so per-card utilities (bg-seal-soft, border-seal/30, p-0) can override it. */
+@layer components {
+  .tg-card {
+    border-radius: 22px;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-soft);
+  }
+  .tg-app[data-scheme='dark'] .tg-card {
+    box-shadow: none;
+  }
 }
 
 /* ───────────── Landing page ───────────── */
