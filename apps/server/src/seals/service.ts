@@ -64,6 +64,7 @@ export type SealErrorCode =
   | 'agent_card_mismatch'
   | 'business_suspended'
   | 'company_never_calls'
+  | 'agent_credential_revoked'
   | 'number_not_allowed'
   | 'purpose_not_allowed'
   | 'message_not_allowed'
@@ -117,6 +118,11 @@ export interface SealServiceDeps {
   inclusion?: (kind: string, refId: string) => Promise<InclusionData | null>;
   /** The recorded safe payment for a seal, if any (pay service). */
   paymentFor?: (sealId: string) => Promise<{ txHash: string; paidAt: Date } | null>;
+  /** Concordium Web3 ID "Authorised AI Caller" credential (CIS-4 registry), when configured. */
+  credentials?: {
+    statusOf(agentAccount: string, force?: boolean): Promise<string>;
+    registry: { index: bigint; subindex: bigint };
+  };
   /** Optional: fetch an account's keys ahead of time (keeps signature checks instant). */
   prefetchAccount?: (address: string) => Promise<void>;
   now?: () => number;
@@ -180,6 +186,13 @@ export function createSealService(deps: SealServiceDeps) {
       throw new SealError('agent_revoked', 'owner changed on chain');
     if (!onChain.agentWallet) throw new SealError('agent_revoked', 'no agentWallet on chain');
     if (onChain.metadataHash !== agent.metadataHash) throw new SealError('agent_card_mismatch');
+    // Cachet's own authorisation (Web3 ID credential): a revoked or expired one stops all seals.
+    // Not issued yet / chain unreadable is not a refusal (the registry check above already passed).
+    if (deps.credentials) {
+      const credential = await deps.credentials.statusOf(agentAccount);
+      if (credential === 'revoked' || credential === 'expired')
+        throw new SealError('agent_credential_revoked', credential);
+    }
     return { business, onChain };
   }
 
@@ -224,6 +237,15 @@ export function createSealService(deps: SealServiceDeps) {
         badge: seal.agent.badge,
         tokenId: seal.agent.tokenId,
         onChain,
+        /** Cachet's "Authorised AI Caller" credential (Concordium Web3 ID), live from the registry. */
+        credential:
+          deps.credentials && agent
+            ? {
+                status: await deps.credentials.statusOf(agent.agentAccount),
+                registry: `<${deps.credentials.registry.index},${deps.credentials.registry.subindex}>`,
+                registryUrl: `${NETWORK_CONFIG[deps.network].explorerBase}/instance/${deps.credentials.registry.index}/${deps.credentials.registry.subindex}`,
+              }
+            : null,
         /** Concordium's own, independent badge checker. */
         badgeCheckUrl: deps.registryUrl
           ? `${deps.registryUrl}/v1/check-badge/${seal.agent.badge.split(':').at(-1) ?? ''}`
@@ -252,6 +274,7 @@ export function createSealService(deps: SealServiceDeps) {
         active.flatMap((a) => [
           a.tokenId !== null ? liveAgent(a.tokenId, true) : Promise.resolve(null),
           deps.prefetchAccount ? deps.prefetchAccount(a.agentAccount) : Promise.resolve(),
+          deps.credentials ? deps.credentials.statusOf(a.agentAccount, true) : Promise.resolve(),
         ]),
       );
       return active.length;

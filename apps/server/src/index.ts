@@ -12,6 +12,7 @@ import {
   createCachedMessageVerifier,
   createRegistryClient,
   createTxSender,
+  parseContractAddress,
   loadAccountKey,
   loadAccountKeyFromBase64,
   verifyAccountMessage,
@@ -42,6 +43,7 @@ import type { FacilitatorClient } from '@x402/core/server';
 import { NETWORK_CONFIG } from '@cachet/shared';
 import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
+import { createCredentialChecker, createCredentialIssuer } from './agents/credentials';
 import { createPublicStats, createStatsSource } from './stats/public-stats';
 import { createDashboard, createDashboardSource } from './business/dashboard';
 import { createCompanyDirectory } from './business/companies';
@@ -116,7 +118,17 @@ const agentKeys = createCachedMessageVerifier(grpc);
 const sealRepo = createSealRepo(database.db);
 const consentsRepo = createConsentsRepo(database.db);
 const paymentsRepo = createPaymentsRepo(database.db);
+// Concordium Web3 ID: Cachet's "Authorised AI Caller" credential registry (optional).
+const credentials = env.W3ID_REGISTRY
+  ? createCredentialChecker({
+      grpc,
+      registry: { ...parseContractAddress(env.W3ID_REGISTRY), metadataUrl: env.W3ID_CREDENTIAL_METADATA_URL },
+    })
+  : undefined;
+if (credentials) console.log(`[w3id] credential registry ${env.W3ID_REGISTRY}`);
+
 const seals = createSealService({
+  ...(credentials ? { credentials } : {}),
   paymentFor: (sealId) => paymentsRepo.forSeal(sealId),
   seals: sealRepo,
   agents: agentRepo,
@@ -385,6 +397,25 @@ if (sponsorKey && env.CCD_SPONSOR_ADDRESS) {
       );
   setInterval(() => void anchorTick(), 30_000).unref();
   void anchorTick();
+
+  // Web3 ID: issue credentials to live AI callers, revoke for suspended companies (same sponsor queue).
+  if (credentials) {
+    const issuer = createCredentialIssuer({
+      checker: credentials,
+      sender: sponsor,
+      kv,
+      agents: agentRepo,
+      businessStatus: async (id) => (await repo.findById(id))?.status ?? null,
+    });
+    const w3idTick = () =>
+      issuer
+        .tick()
+        .catch((err: unknown) =>
+          console.error('[w3id] tick failed:', err instanceof Error ? err.message : err),
+        );
+    setInterval(() => void w3idTick(), 5 * 60_000).unref();
+    setTimeout(() => void w3idTick(), 20_000).unref();
+  }
   console.log(
     `[worker] anchoring every ${env.ANCHOR_INTERVAL_SECONDS}s from sponsor ${env.CCD_SPONSOR_ADDRESS.slice(0, 6)}…`,
   );

@@ -82,6 +82,12 @@ const EnvSchema = z.object({
   PHONE_ENC_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
   /** Anchor the ledger when the oldest item is this old (plan: 5 minutes). */
   ANCHOR_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(300),
+  /** Concordium Web3 ID: Cachet's "Authorised AI Caller" registry (CIS-4), e.g. <13167,0>. Unset = off. */
+  W3ID_REGISTRY: z
+    .string()
+    .regex(/^$|^<?\s*\d+\s*(,\s*\d+\s*)?>?$/)
+    .optional(),
+  W3ID_CREDENTIAL_METADATA_URL: z.url().default('https://getcachet.site/w3id/authorised-ai-caller.json'),
   CCD_SPONSOR_KEY_PATH: optionalString,
   /** Hosting (Railway): the sponsor's wallet export as base64, instead of a file path. */
   CCD_SPONSOR_KEY_B64: optionalString,

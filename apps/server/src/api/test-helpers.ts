@@ -115,6 +115,8 @@ export function makeTestApp(
     verifyAgentMessage?: VerifyMessage;
     /** Company dashboard (/v1/business/dashboard/*). Absent = routes not mounted. */
     dashboard?: Dashboard;
+    /** Web3 ID credential checker for the seal service. Absent = credentials off. */
+    credentials?: Parameters<typeof createSealService>[0]['credentials'];
   } = {},
 ) {
   const clock = { t: Date.parse('2026-11-19T10:00:00Z') };
@@ -155,6 +157,7 @@ export function makeTestApp(
   const signingKey = loadSealSigningKey('22'.repeat(32));
   const checkedMessages: { address: string; message: string }[] = [];
   const seals = createSealService({
+    ...(options.credentials ? { credentials: options.credentials } : {}),
     seals: sealRepo,
     agents: agentRepo,
     businesses: repo,

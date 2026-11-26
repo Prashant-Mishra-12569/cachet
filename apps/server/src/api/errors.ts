@@ -95,6 +95,10 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     message: "The Agent Card pinned on Concordium doesn't match Cachet's record.",
   },
   business_suspended: { status: 403, message: 'This company is suspended in Cachet.' },
+  agent_credential_revoked: {
+    status: 403,
+    message: "This AI caller's authorisation from Cachet was revoked. It can't seal calls.",
+  },
   company_never_calls: {
     status: 403,
     message: 'This company told people it never makes AI calls. Turn that off in Setup before sealing calls.',
