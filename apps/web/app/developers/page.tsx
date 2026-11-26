@@ -106,7 +106,7 @@ const THREATS: [string, string, 'built' | 'planned'][] = [
   ],
   [
     'A company’s AI key is stolen',
-    'The company switches its AI caller off in the Concordium registry; Cachet checks the registry on every seal, so seals stop at once.',
+    'The company switches its AI caller off in the Concordium registry, or Cachet revokes its Web3 ID credential; both are checked on every seal, so seals stop at once.',
     'built',
   ],
   [
@@ -157,6 +157,11 @@ const ONCHAIN: [string, string, string][] = [
     'Protocol-level token + sponsored transaction',
     'A person pays a bill in digital euros from a wallet with 0 CCD; Cachet pays the network fee.',
     'cf0364f41ef0d7ceedbec164bf55439f0f46e8c4e0c800d73f0f5a241099eb87',
+  ],
+  [
+    'Web3 ID credential registry (CIS-4)',
+    'Each live AI caller holds an "Authorised AI Caller" credential in Cachet’s registry. Cachet can revoke it, and seals stop at once.',
+    '975f8d0b77cd269ba9dc217e07ed16173edebd421649d11d1c5797a932401ea9',
   ],
   [
     'Permanent record (RegisterData)',

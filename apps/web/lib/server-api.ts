@@ -23,6 +23,12 @@ export interface PublicSeal {
     tokenId: string;
     onChain: 'active' | 'switched_off' | 'unknown';
     badgeCheckUrl: string | null;
+    /** Cachet's "Authorised AI Caller" credential (Concordium Web3 ID), live. Null when not set up. */
+    credential?: {
+      status: 'active' | 'revoked' | 'expired' | 'not_activated' | 'not_found' | 'unknown';
+      registry: string;
+      registryUrl: string;
+    } | null;
   };
   purpose: string;
   message: string;

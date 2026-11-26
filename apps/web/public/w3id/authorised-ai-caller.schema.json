@@ -1,0 +1,32 @@
+{
+  "name": "Authorised AI Caller",
+  "description": "An AI phone caller run by a company whose identity was proven with Concordium ID, registered in the Concordium Agent Registry, and authorised by Cachet to seal its calls.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getcachet.site/w3id/authorised-ai-caller.schema.json",
+  "type": "object",
+  "properties": {
+    "credentialSubject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "Credential subject id",
+          "type": "string",
+          "description": "The AI caller's own Concordium public key"
+        },
+        "attributes": {
+          "title": "Attributes",
+          "type": "object",
+          "properties": {
+            "companyLegalName": { "title": "Company", "type": "string" },
+            "companyCountry": { "title": "Country", "type": "string" },
+            "agentName": { "title": "AI caller", "type": "string" },
+            "registryBadge": { "title": "Agent Registry badge", "type": "string" }
+          },
+          "required": ["companyLegalName", "agentName", "registryBadge"]
+        }
+      },
+      "required": ["id", "attributes"]
+    }
+  },
+  "required": ["credentialSubject"]
+}

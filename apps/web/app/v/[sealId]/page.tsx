@@ -160,6 +160,29 @@ export default async function SealPage({ params }: Props) {
               </a>
             )}
           </Check>
+          {seal.agent.credential ? (
+            <Check
+              ok={seal.agent.credential.status === 'active'}
+              unknown={['unknown', 'not_found', 'not_activated'].includes(seal.agent.credential.status)}
+            >
+              <strong>Authorised by Cachet.</strong>{' '}
+              {seal.agent.credential.status === 'active'
+                ? 'Holds an active "Authorised AI Caller" credential (Concordium Web3 ID).'
+                : seal.agent.credential.status === 'revoked' || seal.agent.credential.status === 'expired'
+                  ? 'Its "Authorised AI Caller" credential was revoked.'
+                  : seal.agent.credential.status === 'unknown'
+                    ? "We can't reach Concordium right now to check its credential."
+                    : 'Its credential is being issued.'}{' '}
+              <a
+                href={seal.agent.credential.registryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-seal underline"
+              >
+                Registry ↗
+              </a>
+            </Check>
+          ) : null}
           <Check ok={seal.signatureValid}>
             <strong>Sealed by Cachet.</strong> The seal is signed and has not been changed.
           </Check>

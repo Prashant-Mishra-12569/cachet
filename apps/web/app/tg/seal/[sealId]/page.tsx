@@ -130,6 +130,24 @@ export default function TelegramSeal({ params }: { params: Promise<{ sealId: str
               </>
             )}
           </Check>
+          {seal.agent.credential ? (
+            <Check
+              ok={seal.agent.credential.status === 'active'}
+              pending={['unknown', 'not_found', 'not_activated'].includes(seal.agent.credential.status)}
+            >
+              {seal.agent.credential.status === 'active'
+                ? 'Authorised by Cachet (Concordium Web3 ID credential).'
+                : seal.agent.credential.status === 'revoked' || seal.agent.credential.status === 'expired'
+                  ? "Cachet's authorisation was revoked."
+                  : 'Authorisation credential: being checked.'}{' '}
+              <Ext
+                href={seal.agent.credential.registryUrl}
+                onClick={external(seal.agent.credential.registryUrl)}
+              >
+                Registry
+              </Ext>
+            </Check>
+          ) : null}
           <Check ok={seal.signatureValid}>Signed by Cachet, not changed.</Check>
           <Check ok={seal.anchor.status === 'finalized'} pending={seal.anchor.status !== 'finalized'}>
             {seal.anchor.status === 'finalized' && seal.anchor.txUrl ? (
