@@ -4,6 +4,7 @@
  *
  *   pnpm deploy:env server      (Cachet server; production values + references to Postgres/Redis/verifier)
  *   pnpm deploy:env verifier    (Concordium verifier: its key + node endpoint)
+ *   pnpm deploy:env web         (Vercel website: the secret its proxy shares with the server)
  *
  * Secrets that existing data depends on (PHONE_PEPPER, PHONE_ENC_KEY, SEAL_SIGNING_KEY, …) are copied
  * byte for byte from .env, so the copied database keeps working.
@@ -31,7 +32,7 @@ const SERVER_FROM_ENV = [
   'PLT_DECIMALS',
   'COMPANY_ID_ISSUERS',
   'AGENT_REGISTRY_API',
-  'X402_FACILITATOR',
+  'X402_FACILITATOR', // gitleaks:allow (variable names, not values)
   'X402_FACILITATOR_URL',
   'X402_FACILITATOR_API_KEY',
   'X402_FACILITATOR_AUTH',
@@ -40,6 +41,10 @@ const SERVER_FROM_ENV = [
   'W3ID_REGISTRY',
   'TELEGRAM_BOT_TOKEN',
   'GIST_TOKEN',
+  'SPONSOR_LOW_CCD',
+  'OPERATOR_TELEGRAM_CHAT_ID',
+  // Shared with the website (Vercel): must be the same value in both places.
+  'CACHET_PROXY_SECRET',
   // Existing data depends on these: they must be identical to the database's origin.
   'SEAL_SIGNING_KEY',
   'CALL_CODE_SECRET',
@@ -71,6 +76,7 @@ if (which === 'server') {
     'SEAL_SIGNING_KEY',
     'CALL_CODE_SECRET',
     'TELEGRAM_BOT_TOKEN',
+    'CACHET_PROXY_SECRET',
   ]) {
     if (!vars.has(must)) fail(`${must} is empty in .env.`);
   }
@@ -87,6 +93,9 @@ if (which === 'server') {
   vars.set('VERIFIER_URL', 'http://${{verifier.RAILWAY_PRIVATE_DOMAIN}}:8000');
   vars.set('VERIFIER_HEALTH_URL', 'http://${{verifier.RAILWAY_PRIVATE_DOMAIN}}:8001/health');
   vars.set('CCD_SPONSOR_KEY_B64', b64File('CCD_SPONSOR_KEY_PATH'));
+} else if (which === 'web') {
+  if (!env.CACHET_PROXY_SECRET?.trim()) fail('CACHET_PROXY_SECRET is empty in .env. Run: pnpm gen-secrets');
+  vars.set('CACHET_PROXY_SECRET', env.CACHET_PROXY_SECRET.trim());
 } else if (which === 'verifier') {
   vars.set('RAILWAY_DOCKERFILE_PATH', 'infra/verifier/Dockerfile');
   vars.set('VERIFIER_KEY_B64', b64File('CCD_VERIFIER_KEY_PATH'));
@@ -95,7 +104,7 @@ if (which === 'server') {
     env.VERIFIER_NODE_GRPC_ENDPOINT?.trim() || 'https://grpc.testnet.concordium.com:20000',
   );
 } else {
-  fail('usage: pnpm deploy:env server|verifier');
+  fail('usage: pnpm deploy:env server|verifier|web');
 }
 
 const block = [...vars].map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
@@ -104,4 +113,8 @@ const clip = spawnSync('clip', { input: block });
 if (clip.status !== 0) fail('Could not copy to the clipboard.');
 console.log(`✓ ${vars.size} variables for "${which}" are on your clipboard (values not shown):`);
 console.log(`  ${[...vars.keys()].join(', ')}`);
-console.log('  Paste them into Railway → the service → Variables → Raw Editor, then clear your clipboard.');
+console.log(
+  which === 'web'
+    ? '  Paste into Vercel → the project → Settings → Environment Variables (Production), redeploy, then clear your clipboard.'
+    : '  Paste them into Railway → the service → Variables → Raw Editor, then clear your clipboard.',
+);

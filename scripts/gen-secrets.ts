@@ -17,6 +17,8 @@ const SECRETS: Record<string, string> = {
   CALL_CODE_SECRET: 'secret for the 4-digit call codes',
   PHONE_ENC_KEY: 'AES-256-GCM key for phone numbers people share with the bot',
   SESSION_SECRET: 'reserved for signed cookies',
+  CACHET_PROXY_SECRET:
+    'shared by the website proxy (Vercel) and the server, so rate limits count each visitor',
 };
 
 function main(): void {

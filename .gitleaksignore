@@ -1,0 +1,4 @@
+# Checked by hand: public module reference, a list of variable names, an empty example value.
+394efcf83bb821e109306c5f2d6c2f6d64dbfa15:packages/concordium/src/credential-registry-schema.ts:generic-api-key:5
+8899d4bc453914e6bc4a66d97b1531edd5ba504b:scripts/deploy-env.mjs:generic-api-key:33
+2f6024d6a2568920fdaa35bae9af194c7e7c309c:.env.example:generic-api-key:32
