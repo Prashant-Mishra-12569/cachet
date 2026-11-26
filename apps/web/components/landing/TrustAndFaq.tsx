@@ -159,17 +159,29 @@ export function Footer() {
           <span>Cachet. Built by Prashant Mishra. Running on the Concordium test network.</span>
         </div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5">
-          <a href={BOT_URL} className="inline-flex min-h-11 items-center hover:text-ink">
+          <a href={BOT_URL} className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
             Telegram bot
           </a>
-          <Link href="/business" className="inline-flex min-h-11 items-center hover:text-ink">
+          <Link href="/business" className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
             For businesses
+          </Link>
+          <Link href="/developers" className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
+            Developers
+          </Link>
+          <Link href="/status" className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
+            Status
+          </Link>
+          <Link href="/privacy" className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
+            Privacy
+          </Link>
+          <Link href="/terms" className="inline-flex min-h-11 min-w-11 items-center hover:text-ink">
+            Terms
           </Link>
           <a
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center hover:text-ink"
+            className="inline-flex min-h-11 min-w-11 items-center hover:text-ink"
           >
             Source code
           </a>
