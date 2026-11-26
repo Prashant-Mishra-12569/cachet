@@ -6,6 +6,7 @@ import { CachetLogo } from '@/components/brand/Seal';
 import { Calls } from '@/components/business/Calls';
 import { Compliance } from '@/components/business/Compliance';
 import { Overview } from '@/components/business/Overview';
+import { NeverCalls } from '@/components/business/NeverCalls';
 import { Payments } from '@/components/business/Payments';
 import { api, ApiError } from '@/lib/api';
 import type { Summary } from '@/lib/dashboard-types';
@@ -175,6 +176,13 @@ export function BusinessDashboard({ account, onSignOut }: { account: string; onS
           <div className="flex max-w-2xl flex-col gap-6">
             <CompanyProof business={business} onProven={setBusiness} />
             <AgentSetup account={account} />
+            <NeverCalls
+              business={business}
+              hasLiveCaller={
+                summary?.agents.some((a) => a.status === 'active' || a.status === 'registered') ?? false
+              }
+              onChange={setBusiness}
+            />
           </div>
         )}
       </main>

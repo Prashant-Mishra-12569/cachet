@@ -184,6 +184,7 @@ export default function ComplianceReportPage() {
                   ['Still in progress', t.inProgress],
                   ['Bills paid inside the call card', r.payments],
                   ['Reports from people about these calls', r.reports],
+                  ['Scam calls reported as pretending to be this company', r.impersonations],
                 ] as const
               ).map(([label, value]) => (
                 <tr key={label}>

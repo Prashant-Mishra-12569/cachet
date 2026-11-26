@@ -38,7 +38,7 @@ export interface Summary {
   perDay: { day: string; answered: number; other: number }[];
   payments: { count: number; collected: { asset: string; total: string }[] };
   consents: { granted: number; revoked: number };
-  reports: { count: number };
+  reports: { count: number; impersonations: number };
   credits: { left: number; daysLeft: number | null };
   record: { sealed: number; inRecord: number };
   agents: DashAgent[];
@@ -94,6 +94,7 @@ export interface ComplianceReport {
   totals: Counts & { pickupRate: number | null };
   consents: { granted: number; revoked: number };
   reports: number;
+  impersonations: number;
   payments: number;
   records: {
     txHash: string | null;

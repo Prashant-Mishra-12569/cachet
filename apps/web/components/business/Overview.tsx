@@ -98,11 +98,16 @@ export function Overview({ business, summary }: { business: BusinessView; summar
         <CallsChart days={summary.perDay} />
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="People who blocked you"
           value={nf.format(summary.consents.revoked)}
           note={`${summary.consents.granted} chose to allow your calls`}
+        />
+        <Stat
+          label="Scam calls using your name"
+          value={nf.format(summary.reports.impersonations)}
+          note="People said a caller with no seal claimed to be you. Last 30 days."
         />
         <Stat
           label="Reports about your sealed calls"

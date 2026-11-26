@@ -10,6 +10,7 @@ export interface BusinessView {
   legalName: string;
   legalCountry: string;
   status: 'active' | 'suspended';
+  neverCalls: boolean;
   verifiedAt: string;
   proofTxUrl: string;
   requestTxUrl: string;
