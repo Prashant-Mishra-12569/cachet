@@ -166,3 +166,5 @@ export function createCachetClient(options: CachetClientOptions) {
 }
 
 export type CachetClient = ReturnType<typeof createCachetClient>;
+
+export { createPayingFetch, toAtomic } from './x402';

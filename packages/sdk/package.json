@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@cachet/shared": "workspace:*",
-    "@concordium/web-sdk": "12.0.2"
+    "@concordium/web-sdk": "12.0.2",
+    "@x402/concordium": "2.32.0",
+    "@x402/core": "2.32.0",
+    "@x402/fetch": "2.32.0"
   }
 }
