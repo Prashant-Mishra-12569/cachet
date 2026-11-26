@@ -78,6 +78,13 @@
       "when": 1795693584211,
       "tag": "0010_reports_claimed_business",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795697491620,
+      "tag": "0011_reports_one_per_seal",
+      "breakpoints": true
     }
   ]
 }

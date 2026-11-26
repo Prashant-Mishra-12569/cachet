@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "reports_one_per_seal_person" ON "reports" USING btree ("seal_id","person_id") WHERE "reports"."seal_id" is not null;

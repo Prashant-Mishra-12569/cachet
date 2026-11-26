@@ -359,6 +359,10 @@ export const reports = pgTable(
   (t) => [
     index('reports_phone_idx').on(t.phoneHash, t.createdAt),
     index('reports_claimed_business_idx').on(t.claimedBusinessId, t.createdAt),
+    // One report per person per sealed call (risk scoring counts people, so nobody counts twice).
+    uniqueIndex('reports_one_per_seal_person')
+      .on(t.sealId, t.personId)
+      .where(sql`${t.sealId} is not null`),
   ],
 );
 export type SealRow = typeof seals.$inferSelect;
