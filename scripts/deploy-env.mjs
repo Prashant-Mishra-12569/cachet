@@ -37,6 +37,7 @@ const SERVER_FROM_ENV = [
   'X402_FACILITATOR_AUTH',
   'SEAL_PRICE',
   'ANCHOR_INTERVAL_SECONDS',
+  'W3ID_REGISTRY',
   'TELEGRAM_BOT_TOKEN',
   'GIST_TOKEN',
   // Existing data depends on these: they must be identical to the database's origin.

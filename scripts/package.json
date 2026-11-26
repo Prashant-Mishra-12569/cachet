@@ -13,6 +13,7 @@
     "gen-secrets": "tsx gen-secrets.ts",
     "seal:smoke": "tsx seal-smoke.ts",
     "anchor:verify": "tsx anchor-verify.ts",
+    "w3id": "tsx w3id.ts",
     "delivery:bench": "tsx delivery-bench.ts",
     "pay:smoke": "tsx sponsored-transfer-smoke.ts",
     "credits:buy": "tsx credits-buy.ts",
