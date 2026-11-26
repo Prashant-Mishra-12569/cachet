@@ -41,7 +41,9 @@
     "w3id": "pnpm --filter @cachet/scripts w3id",
     "company:status": "pnpm --filter @cachet/server company:status",
     "mcp": "pnpm -s --filter @cachet/mcp start",
-    "mcp:example": "pnpm --filter @cachet/mcp example"
+    "mcp:example": "pnpm --filter @cachet/mcp example",
+    "red-team": "pnpm --filter @cachet/server red-team",
+    "load-test": "pnpm --filter @cachet/server load-test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
