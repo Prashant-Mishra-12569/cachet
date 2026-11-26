@@ -88,3 +88,20 @@ export async function getPublicStats(): Promise<PublicStats | null> {
     return null;
   }
 }
+
+/** The server's own health check (for /status). Null when it can't be reached. */
+export async function getHealth(): Promise<
+  (Record<string, unknown> & { ok?: boolean; network?: string }) | null
+> {
+  try {
+    const res = await fetch(`${API_URL}/healthz`, {
+      next: { revalidate: 30 },
+      signal: AbortSignal.timeout(5_000),
+    });
+    return res.ok
+      ? ((await res.json()) as Record<string, unknown> & { ok?: boolean; network?: string })
+      : null;
+  } catch {
+    return null;
+  }
+}

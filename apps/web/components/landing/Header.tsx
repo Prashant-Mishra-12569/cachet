@@ -16,6 +16,12 @@ export function Header() {
           How it works
         </a>
         <Link
+          href="/developers"
+          className="hidden min-h-11 items-center rounded-full px-3 text-ink-2 hover:text-ink lg:flex"
+        >
+          Developers
+        </Link>
+        <Link
           href="/business"
           className="hidden min-h-11 items-center rounded-full px-3 text-ink-2 hover:text-ink sm:flex"
         >
