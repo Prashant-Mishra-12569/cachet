@@ -20,6 +20,7 @@ const TOC = [
   ['close', 'Close the seal'],
   ['checks', 'What Cachet checks'],
   ['verify', 'Verify a seal yourself'],
+  ['mcp', 'Use it from an AI agent (MCP)'],
   ['errors', 'Errors'],
   ['threats', 'Threat model'],
   ['concordium', 'Built on Concordium'],
@@ -377,6 +378,47 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
             transaction. Recompute the root and compare it with the transaction&apos;s data on any Concordium
             explorer. The full signed seal contains the call code, so only the person who was called receives
             it; they can check Cachet&apos;s signature offline with the public key.
+          </P>
+
+          <H2 id="mcp">Use it from an AI agent (MCP)</H2>
+          <P>
+            The Cachet MCP server lets any agent that speaks the Model Context Protocol (Claude, LangChain,
+            voice-AI platforms) seal its calls by itself. It runs next to your agent, holds the AI&apos;s key
+            locally and pays for seals with x402 (at most €0.05 per payment by default).
+          </P>
+          <ul className="mt-3 max-w-[68ch] list-disc space-y-1.5 pl-5 text-[16px] leading-relaxed text-ink-2">
+            <li>
+              <C>cachet_seal_call</C>: right before dialling. Returns the code and <C>firstLine</C>, the
+              sentence to say first.
+            </li>
+            <li>
+              <C>cachet_close_seal</C>: when the call ends.
+            </li>
+            <li>
+              <C>cachet_check_company</C>: is a company verified, does it make AI calls, from which numbers?
+            </li>
+            <li>
+              <C>cachet_check_seal</C>: what Cachet checked for one seal.
+            </li>
+          </ul>
+          <Code label="Claude Desktop (claude_desktop_config.json) or any MCP client">{`
+{
+  "mcpServers": {
+    "cachet": {
+      "command": "pnpm",
+      "args": ["-s", "--dir", "/path/to/cachet", "--filter", "@cachet/mcp", "start"],
+      "env": {
+        "CACHET_AGENT_BADGE": "JyP9UD2cnf5bw2YzH1GTX",
+        "CCD_AGENT_ADDRESS": "<your AI's Concordium account>",
+        "CCD_AGENT_KEY_PATH": "/safe/place/agent.export",
+        "CACHET_CALLER_ID": "+31201234567"
+      }
+    }
+  }
+}`}</Code>
+          <P>
+            The key file never leaves your machine. To see it work, run <C>pnpm mcp:example +31612345678</C>:
+            an example agent connects, checks a company, seals, checks the seal and closes it.
           </P>
 
           <H2 id="errors">Errors</H2>
