@@ -18,6 +18,8 @@ import { sealRoutes, wellKnownRoutes, type SealRouteDeps } from './routes/seals'
 import { businessRoutes } from './routes/business';
 import type { PublicStatsService } from '../stats/public-stats';
 import type { Dashboard } from '../business/dashboard';
+import type { CompanyDirectory } from '../business/companies';
+import { rateLimit } from './middleware';
 
 export interface AppDeps {
   network: Network;
@@ -38,6 +40,8 @@ export interface AppDeps {
   x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
   miniApp?: Pick<MiniAppRouteDeps, 'miniAppSecret' | 'people' | 'sealRepo' | 'family' | 'pay' | 'now'>;
+  /** Public company lookup (/v1/companies). */
+  companies?: CompanyDirectory;
   /** Company dashboard + compliance exports (/v1/business/dashboard/*). */
   dashboard?: Dashboard;
   /** Live totals for the public website (/v1/stats). */
@@ -73,6 +77,27 @@ export function createApp(deps: AppDeps) {
       c.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
       return c.json(await stats.get());
     });
+  }
+
+  if (deps.companies) {
+    const directory = deps.companies;
+    // "Is this company real, and does it make AI calls?" Public facts only; limited per IP.
+    app.get(
+      '/v1/companies',
+      rateLimit({
+        kv: deps.kv,
+        name: 'companies',
+        limit: 60,
+        windowSeconds: 600,
+        trustProxy: deps.trustProxy,
+      }),
+      async (c) => {
+        const q = (c.req.query('query') ?? '').replace(/\s+/g, ' ').trim();
+        if (q.length < 2 || q.length > 60) return apiError(c, 'invalid_request');
+        c.header('Cache-Control', 'public, max-age=60');
+        return c.json({ companies: await directory.search(q) });
+      },
+    );
   }
 
   app.route('/v1/auth', authRoutes(deps));

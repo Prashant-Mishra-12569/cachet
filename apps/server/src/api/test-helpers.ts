@@ -20,6 +20,7 @@ import { createMemoryKv } from '../infra/kv';
 import type { VerifierClient } from '../verify/verifier-client';
 import { createApp } from './app';
 import type { Dashboard } from '../business/dashboard';
+import { createCompanyDirectory } from '../business/companies';
 
 export const WEB_ORIGIN = 'http://localhost:3000';
 /** Real-format testnet addresses (public). */
@@ -275,6 +276,12 @@ export function makeTestApp(
     x402: { billing, agents: agentRepo, credits: sealRepo },
     miniApp: { miniAppSecret: TG_SECRET, people, sealRepo, family: familyRepo, pay, now },
     ...(options.dashboard ? { dashboard: options.dashboard } : {}),
+    companies: createCompanyDirectory({
+      businesses: repo,
+      agents: agentRepo,
+      network: 'testnet',
+      registryUrl: 'https://registry.test',
+    }),
   });
   return {
     app,

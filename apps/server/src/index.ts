@@ -44,6 +44,7 @@ import { createRedisKv } from './infra/kv';
 import { createSealRepo } from './seals/repo';
 import { createPublicStats, createStatsSource } from './stats/public-stats';
 import { createDashboard, createDashboardSource } from './business/dashboard';
+import { createCompanyDirectory } from './business/companies';
 import { createSealService } from './seals/service';
 import { createVerifierClient } from './verify/verifier-client';
 import { createAnchorRepo } from './worker/anchor-repo';
@@ -294,6 +295,12 @@ const app = createApp({
       }
     : {}),
   stats: createPublicStats({ source: createStatsSource(database.db), network: env.CCD_NETWORK }),
+  companies: createCompanyDirectory({
+    businesses: repo,
+    agents: agentRepo,
+    network: env.CCD_NETWORK,
+    registryUrl: registry.baseUrl,
+  }),
   dashboard: createDashboard({
     source: createDashboardSource(database.db),
     network: env.CCD_NETWORK,
