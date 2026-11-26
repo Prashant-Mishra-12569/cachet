@@ -1,3 +1,4 @@
+import { errText } from '../infra/err-text';
 import type { AccountTransactionSignature } from '@concordium/web-sdk';
 import type { MessageCheck, OnChainAgent } from '@cachet/concordium';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
@@ -203,7 +204,7 @@ export function createSealService(deps: SealServiceDeps) {
         SEAL_CHANNEL,
         JSON.stringify({ type: 'seal.closed', sealId: row.id, phoneHash: row.phoneHash, reason }),
       )
-      .catch((err: unknown) => console.error('[seals] publish failed', err));
+      .catch((err: unknown) => console.error('[seals] publish failed:', errText(err)));
   }
 
   /** Share-safe view of a seal: no phone data, no call code. */
@@ -319,6 +320,9 @@ export function createSealService(deps: SealServiceDeps) {
       const agent = await deps.agents.findByBadge(request.badge);
       // Cheap checks on our own data first, then the signature, then the chain.
       if (!agent) throw new SealError('agent_unknown');
+      // Before the signature check (which may fetch keys from the chain): a stranger can't make us
+      // look up random accounts by sending a real badge with someone else's account.
+      if (agent.agentAccount !== request.agentAccount) throw new SealError('agent_account_mismatch');
       const digest = await authenticate(request, signature, sealRequestMessage);
       const { business } = await checkAgent(agent, request.agentAccount);
 
@@ -410,7 +414,7 @@ export function createSealService(deps: SealServiceDeps) {
           SEAL_CHANNEL,
           JSON.stringify({ type: 'seal.issued', sealId: id, phoneHash: seal.callee.phoneHash }),
         )
-        .catch((err: unknown) => console.error('[seals] publish failed', err));
+        .catch((err: unknown) => console.error('[seals] publish failed:', errText(err)));
 
       return {
         sealId: id,

@@ -103,6 +103,13 @@ describe('POST /v1/agents (add your AI caller)', () => {
     expect(await errorCode(res)).toBe('number_in_use');
   });
 
+  it("an AI account can belong to only one live AI caller (no company can take another's)", async () => {
+    const ctx = await setup();
+    await ctx.create();
+    const { res } = await ctx.create({ callingNumbers: ['+31209999999'] });
+    expect(await errorCode(res)).toBe('agent_account_in_use');
+  });
+
   it('removes duplicate numbers', async () => {
     const { agent } = await (await setup()).create({ callingNumbers: ['+31201234567', '+31201234567'] });
     expect(agent['callingNumbers']).toEqual(['+31201234567']);
@@ -178,7 +185,10 @@ describe('register on Concordium (step 3)', () => {
   it('the same transaction cannot register two AI callers', async () => {
     const ctx = await setup();
     await registered(ctx, 42n);
-    const { agent: second } = await ctx.create({ callingNumbers: ['+31209999999'] });
+    const { agent: second } = await ctx.create({
+      callingNumbers: ['+31209999999'],
+      agentAccount: OTHER_ACCOUNT, // each AI caller has its own account
+    });
     const res = await ctx.post(`/v1/agents/${String(second['id'])}/register/confirm`, { txHash: TX1 });
     expect(await errorCode(res)).toBe('tx_already_used');
   });

@@ -6,6 +6,7 @@ import type { KvStore } from '../infra/kv';
 import type { SealRepo } from '../seals/repo';
 import { SEAL_CHANNEL } from '../seals/service';
 import type { PaymentsRepo } from './repo';
+import { errText } from '../infra/err-text';
 
 export type PayErrorCode =
   | 'seal_not_found'
@@ -20,7 +21,9 @@ export type PayErrorCode =
   | 'pay_unavailable'
   | 'pay_pending'
   | 'pay_failed'
-  | 'pay_mismatch';
+  | 'pay_mismatch'
+  | 'pay_not_allowed'
+  | 'pay_still_confirming';
 
 export class PayError extends Error {
   constructor(
@@ -45,6 +48,21 @@ export interface PayChain {
   }): Promise<{ json: string; expiresAt: Date }>;
   /** Finalized summary as plain JSON, or null if not finalized within the wait. */
   finalizedSummary(txHash: string): Promise<Record<string, unknown> | null>;
+  /** The token's own rules for this transfer (allow list, paused, balance). Absent = not checked. */
+  transferCheck?(input: {
+    sender: string;
+    recipient: string;
+    tokenId: string;
+    amount: string;
+  }): Promise<'ok' | 'not_allowed' | 'paused' | 'insufficient_funds'>;
+}
+
+/** What prepare remembers about the transfer it built (confirm checks against exactly this). */
+interface Expect {
+  recipient: string;
+  sender: string;
+  expiresAt?: string;
+  transaction?: string;
 }
 
 export interface PayServiceDeps {
@@ -100,7 +118,7 @@ export function createPayService(deps: PayServiceDeps) {
     return live.agentWallet;
   }
 
-  return {
+  const service = {
     /** Build the sponsored transfer for the person's wallet to approve. */
     async prepare(sealId: string, calleeHash: string, senderInput: string) {
       const { row, seal, amount } = await sealFor(sealId, calleeHash);
@@ -116,13 +134,41 @@ export function createPayService(deps: PayServiceDeps) {
       const recipient = await liveRecipient(row.agentId, seal.company.account);
       if (sender === recipient) throw new PayError('pay_invalid_account', 'sender is the recipient');
 
-      // One payment in flight per seal: a second wallet could otherwise pay the same bill twice.
-      // (The same wallet may retry: both transfers share its nonce, so at most one can execute.)
+      // One payment per seal, never two.
+      // 1. A transfer the wallet already SENT: if it paid, record it and stop; if it is still on its way
+      //    (or the chain can't be read), wait. Only a FAILED one may be followed by a new transfer.
+      const submitted = await deps.kv.get(`pay:submitted:${sealId}`);
+      if (submitted) {
+        const result = await service.confirm(sealId, calleeHash, submitted).catch((err: unknown) => err);
+        if (!(result instanceof PayError)) throw new PayError('pay_already_paid');
+        if (result.code === 'pay_failed') {
+          // That transfer can't pay any more: forget it and its prepared twin.
+          await deps.kv.del(`pay:submitted:${sealId}`);
+          await deps.kv.del(`pay:expect:${sealId}`);
+        } else if (result.code === 'pay_mismatch') {
+          await deps.kv.del(`pay:submitted:${sealId}`); // not this bill's transfer: ignore it
+        } else {
+          throw result.code === 'pay_unavailable' ? result : new PayError('pay_still_confirming');
+        }
+      }
+      // 2. While a prepared transfer is still valid, a retry (double tap, reload) gets THAT SAME transfer
+      //    back: a new one would take the wallet's next nonce, and both could go through. Another
+      //    wallet must wait until it has expired.
       const pending = await deps.kv.get(`pay:expect:${sealId}`);
       if (pending) {
-        const p = JSON.parse(pending) as { sender: string; expiresAt?: string };
-        if (p.sender !== sender && p.expiresAt && Date.parse(p.expiresAt) > now()) {
-          throw new PayError('pay_in_progress');
+        const p = JSON.parse(pending) as Expect;
+        if (p.expiresAt && Date.parse(p.expiresAt) > now()) {
+          if (p.sender !== sender) throw new PayError('pay_in_progress');
+          if (p.transaction) {
+            return {
+              transaction: p.transaction,
+              expiresAt: p.expiresAt,
+              amount,
+              company: seal.company.legalName,
+              recipient: p.recipient,
+              sender,
+            };
+          }
         }
       }
       // Every prepared transfer is a fee Cachet may pay, even if it fails on chain: limit them.
@@ -133,6 +179,19 @@ export function createPayService(deps: PayServiceDeps) {
       const balance = await deps.chain.balanceRaw(sender, deps.pltTokenId);
       if (balance === null) throw new PayError('pay_account_not_found');
       if (balance < amountRaw) throw new PayError('pay_insufficient_funds');
+      // The token's own rules (allow list, paused): a transfer that would fail still costs the sponsor
+      // its fee, so it is never built.
+      const allowed = deps.chain.transferCheck
+        ? await deps.chain.transferCheck({
+            sender,
+            recipient,
+            tokenId: deps.pltTokenId,
+            amount: amount.value,
+          })
+        : 'ok';
+      if (allowed === 'not_allowed') throw new PayError('pay_not_allowed');
+      if (allowed === 'paused') throw new PayError('pay_closed', 'token paused');
+      if (allowed === 'insufficient_funds') throw new PayError('pay_insufficient_funds');
 
       const built = await deps.chain.buildSponsoredTransfer({
         sender,
@@ -145,7 +204,12 @@ export function createPayService(deps: PayServiceDeps) {
       // Confirm checks against exactly what we built (even if the agentWallet changes meanwhile).
       await deps.kv.set(
         `pay:expect:${sealId}`,
-        JSON.stringify({ recipient, sender, expiresAt: built.expiresAt.toISOString() }),
+        JSON.stringify({
+          recipient,
+          sender,
+          expiresAt: built.expiresAt.toISOString(),
+          transaction: built.json,
+        } satisfies Expect),
         3600,
       );
       return {
@@ -169,6 +233,9 @@ export function createPayService(deps: PayServiceDeps) {
           return { status: 'paid' as const, txHash: hash, paidAt: existing.paidAt };
         throw new PayError('pay_already_paid');
       }
+      // Remember the transfer the wallet sent, so a later attempt never builds a second one while this
+      // one may still pay (see prepare).
+      await deps.kv.set(`pay:submitted:${sealId}`, hash, 3600);
       const expectRaw = await deps.kv.get(`pay:expect:${sealId}`);
       const recipient = expectRaw
         ? (JSON.parse(expectRaw) as { recipient: string }).recipient
@@ -221,11 +288,12 @@ export function createPayService(deps: PayServiceDeps) {
             SEAL_CHANNEL,
             JSON.stringify({ type: 'seal.paid', sealId, phoneHash: row.phoneHash, txHash: hash }),
           )
-          .catch((err: unknown) => console.error('[pay] publish failed', err));
+          .catch((err: unknown) => console.error('[pay] publish failed:', errText(err)));
       }
       return { status: 'paid' as const, txHash: payment.txHash, paidAt: payment.paidAt };
     },
   };
+  return service;
 }
 
 export type PayService = ReturnType<typeof createPayService>;

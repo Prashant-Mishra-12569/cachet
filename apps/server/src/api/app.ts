@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
+import { bodyLimit } from 'hono/body-limit';
 import { NETWORK_CONFIG, type Network } from '@cachet/shared';
 import type { SealSigningKey } from '@cachet/shared/seal';
 import type { AgentService } from '../agents/service';
@@ -22,7 +23,8 @@ import type { CompanyDirectory } from '../business/companies';
 import type { RiskEngine } from '../business/risk';
 import type { ApiKeys } from '../business/api-keys';
 import { dataRoutes } from './routes/data';
-import { rateLimit } from './middleware';
+import { rateLimit, trustWebsiteProxy } from './middleware';
+import { errText } from '../infra/err-text';
 
 export interface AppDeps {
   network: Network;
@@ -39,6 +41,8 @@ export interface AppDeps {
   webOrigin: string;
   secureCookies: boolean;
   trustProxy: boolean;
+  /** Secret shared with the website's proxy (see trustWebsiteProxy). */
+  proxySecret?: string | undefined;
   /** x402 seal billing (/v1/credits/purchase + per-seal payment). Absent = credits only. */
   x402?: SealRouteDeps['billing'];
   /** Telegram Mini App API (/v1/tg/*). Only when the bot token is set. */
@@ -64,6 +68,9 @@ export function createApp(deps: AppDeps) {
   const app = new Hono();
 
   app.use(secureHeaders());
+  app.use(trustWebsiteProxy(deps.proxySecret));
+  // No request needs more (the largest is a company proof, ~256 KB): a huge body can't tie up memory.
+  app.use(bodyLimit({ maxSize: 300 * 1024, onError: (c) => apiError(c, 'invalid_request') }));
 
   app.get('/healthz', async (c) => {
     const entries = Object.entries({ redis: () => deps.kv.ping(), ...deps.checks });
@@ -128,7 +135,7 @@ export function createApp(deps: AppDeps) {
   app.notFound((c) => apiError(c, 'not_found'));
 
   app.onError((err, c) => {
-    console.error('[api] unhandled error', err);
+    console.error('[api] unhandled error:', errText(err));
     return apiError(c, 'internal');
   });
 

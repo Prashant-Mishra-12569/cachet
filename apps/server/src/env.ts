@@ -32,6 +32,11 @@ const EnvSchema = z.object({
   WEB_ORIGIN: z.url().default('http://localhost:3000'),
   /** Set to true when running behind a proxy that sets X-Forwarded-For (Railway, Fly). */
   TRUST_PROXY: booleanFlag,
+  /**
+   * Shared with the website (Vercel): its proxy sends the visitor's real IP with this secret, so rate
+   * limits count each visitor, not the proxy. Unset = the connecting IP is used.
+   */
+  CACHET_PROXY_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   DATABASE_URL: z.string().min(1).default('postgres://cachet:cachet@localhost:5432/cachet'),
 
@@ -60,6 +65,11 @@ const EnvSchema = z.object({
 
   TELEGRAM_BOT_TOKEN: optionalString,
   /**
+   * Local testing next to the live bot: keep the Mini App API (it needs the token to check Telegram's
+   * signatures) but never start the bot or send cards (no clash, no messages to real people).
+   */
+  TELEGRAM_BOT_OFF: booleanFlag,
+  /**
    * Public https address of the website for the Telegram Mini App (Telegram only opens https).
    * Local testing: a tunnel to http://localhost:3000. Empty = no Mini App buttons.
    */
@@ -82,6 +92,10 @@ const EnvSchema = z.object({
   PHONE_ENC_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'missing or malformed. Run "pnpm gen-secrets".'),
   /** Anchor the ledger when the oldest item is this old (plan: 5 minutes). */
   ANCHOR_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(300),
+  /** Alert when the sponsor (pays payment, x402 and record fees) has less CCD than this. */
+  SPONSOR_LOW_CCD: z.coerce.number().positive().default(1000),
+  /** Your own Telegram chat id: the bot sends operator alerts there (sponsor running low). */
+  OPERATOR_TELEGRAM_CHAT_ID: z.preprocess(emptyToUndefined, z.coerce.number().int().optional()),
   /** Risk scoring: suspend a company when ≥ MIN_REPORTERS different people (and ≥ MIN_SHARE of the
    *  people it called) reported its sealed calls within WINDOW_DAYS. */
   RISK_WINDOW_DAYS: z.coerce.number().int().min(1).max(90).default(7),

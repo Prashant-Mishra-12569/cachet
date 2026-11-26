@@ -8,6 +8,7 @@ import {
 import {
   CborAccountAddress,
   CborMemo,
+  Token,
   TokenAmount,
   TokenId,
   createTokenUpdatePayload,
@@ -47,6 +48,29 @@ export function toPlainJson(value: unknown): unknown {
   return JSON.parse(
     JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x)),
   ) as unknown;
+}
+
+/**
+ * Would this transfer be accepted by the token's own rules (allow list, deny list, paused, balance)?
+ * Checked before the sponsor signs: a sponsored transfer that fails on chain still costs its fee.
+ */
+export async function transferCheck(
+  client: ConcordiumGRPCClient,
+  input: { sender: string; recipient: string; tokenId: string; amount: string; decimals: number },
+): Promise<'ok' | 'not_allowed' | 'paused' | 'insufficient_funds'> {
+  const token = await Token.fromId(client, TokenId.fromString(input.tokenId));
+  try {
+    await Token.validateTransfer(token, AccountAddress.fromBase58(input.sender), {
+      amount: TokenAmount.create(decimalToRaw(input.amount, input.decimals), input.decimals),
+      recipient: CborAccountAddress.fromAccountAddress(AccountAddress.fromBase58(input.recipient)),
+    });
+    return 'ok';
+  } catch (err) {
+    if (err instanceof Token.NotAllowedError) return 'not_allowed';
+    if (err instanceof Token.PausedError) return 'paused';
+    if (err instanceof Token.InsufficientFundsError) return 'insufficient_funds';
+    throw err;
+  }
 }
 
 /** An account's balance of a token, in raw units. Null if the account doesn't exist. */

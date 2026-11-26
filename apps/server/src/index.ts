@@ -1,3 +1,5 @@
+import { errText } from './infra/err-text';
+import { createSponsorWatch } from './worker/sponsor-watch';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { TokenId } from '@concordium/web-sdk/plt';
@@ -16,6 +18,8 @@ import {
   loadAccountKey,
   loadAccountKeyFromBase64,
   verifyAccountMessage,
+  getAccountSnapshot,
+  transferCheck,
 } from '@cachet/concordium';
 import { loadSealSigningKey } from '@cachet/shared/seal';
 import { createDb, runMigrations } from '@cachet/db';
@@ -220,6 +224,7 @@ const pay =
             }),
           // Under the website proxy's time limit; the Mini App asks again while it's pending.
           finalizedSummary: (txHash) => finalizedSummary(grpc, txHash, 20_000),
+          transferCheck: (input) => transferCheck(grpc, { ...input, decimals: env.PLT_DECIMALS }),
         },
       })
     : undefined;
@@ -295,6 +300,21 @@ const risk = createRiskEngine({
   },
 });
 
+// The sponsor pays every fee Cachet covers: watch its balance (health page + operator alert).
+const sponsorWatch = env.CCD_SPONSOR_ADDRESS
+  ? createSponsorWatch({
+      balance: async () => Number((await getAccountSnapshot(grpc, env.CCD_SPONSOR_ADDRESS ?? '')).ccd),
+      address: env.CCD_SPONSOR_ADDRESS,
+      lowCcd: env.SPONSOR_LOW_CCD,
+      kv,
+      notify: env.OPERATOR_TELEGRAM_CHAT_ID
+        ? async (text) => {
+            if (bot) await bot.api.sendMessage(env.OPERATOR_TELEGRAM_CHAT_ID ?? 0, text);
+          }
+        : undefined,
+    })
+  : undefined;
+
 const app = createApp({
   riskStatus: risk,
   network: env.CCD_NETWORK,
@@ -310,6 +330,7 @@ const app = createApp({
   webOrigin: env.WEB_ORIGIN,
   secureCookies: env.NODE_ENV === 'production',
   trustProxy: env.TRUST_PROXY,
+  proxySecret: env.CACHET_PROXY_SECRET,
   ...(billing ? { x402: { billing, agents: agentRepo, credits: sealRepo } } : {}),
   ...(env.TELEGRAM_BOT_TOKEN
     ? {
@@ -338,7 +359,11 @@ const app = createApp({
     webOrigin: env.WEB_ORIGIN,
     registryUrl: registry.baseUrl,
   }),
-  checks: { database: () => database.ping(), verifier: () => verifier.health() },
+  checks: {
+    database: () => database.ping(),
+    verifier: () => verifier.health(),
+    ...(sponsorWatch ? { sponsor: async () => sponsorWatch.healthy() } : {}),
+  },
 });
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
@@ -350,7 +375,7 @@ server.on('error', (err: NodeJS.ErrnoException) => {
       `[api] port ${env.PORT} is already in use. Is another "pnpm dev" still running? Stop it first.`,
     );
   } else {
-    console.error('[api] server error:', err);
+    console.error('[api] server error:', errText(err));
   }
   process.exit(1);
 });
@@ -361,21 +386,23 @@ if (!(await verifier.health())) {
   );
 }
 
-const bot = env.TELEGRAM_BOT_TOKEN
-  ? createBot(env.TELEGRAM_BOT_TOKEN, {
-      people,
-      reports: reportsRepo,
-      seals: sealRepo,
-      family: familyRepo,
-      consents: consentsRepo,
-      businesses: repo,
-      agents: agentRepo,
-      kv,
-      endSealsFrom: (phoneHash, businessId) => seals.endForCallee(phoneHash, businessId, 'blocked_by_callee'),
-      phoneCipher: createPhoneCipher(env.PHONE_ENC_KEY),
-      phonePepper: env.PHONE_PEPPER,
-    })
-  : undefined;
+const bot =
+  env.TELEGRAM_BOT_TOKEN && !env.TELEGRAM_BOT_OFF
+    ? createBot(env.TELEGRAM_BOT_TOKEN, {
+        people,
+        reports: reportsRepo,
+        seals: sealRepo,
+        family: familyRepo,
+        consents: consentsRepo,
+        businesses: repo,
+        agents: agentRepo,
+        kv,
+        endSealsFrom: (phoneHash, businessId) =>
+          seals.endForCallee(phoneHash, businessId, 'blocked_by_callee'),
+        phoneCipher: createPhoneCipher(env.PHONE_ENC_KEY),
+        phonePepper: env.PHONE_PEPPER,
+      })
+    : undefined;
 if (bot) {
   startBotPolling(bot, { miniAppUrl: env.MINIAPP_URL }).catch((err: unknown) => {
     console.error('[bot] could not start. Check TELEGRAM_BOT_TOKEN in .env.', err);
@@ -391,7 +418,16 @@ if (bot) {
     miniAppUrl: env.MINIAPP_URL,
   }).start();
 } else {
-  console.log('[bot] skipped: TELEGRAM_BOT_TOKEN is not set in .env');
+  console.log(
+    env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_BOT_OFF
+      ? '[bot] off (TELEGRAM_BOT_OFF): Mini App API only, no cards are sent'
+      : '[bot] skipped: TELEGRAM_BOT_TOKEN is not set in .env',
+  );
+}
+
+if (sponsorWatch) {
+  setInterval(() => void sponsorWatch.tick(), 10 * 60_000).unref();
+  setTimeout(() => void sponsorWatch.tick(), 5_000).unref();
 }
 
 // Anchoring worker: Merkle root of new seals/closings → RegisterData on chain, paid by the sponsor.

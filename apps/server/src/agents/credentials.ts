@@ -125,6 +125,22 @@ export function createCredentialIssuer(deps: {
           const status = await deps.checker.statusOf(agent.agentAccount, true);
           if (status === 'unknown') continue;
           const company = await deps.businessStatus(agent.businessId);
+          // The credential belongs to the AI ACCOUNT. Never revoke it while any live AI caller of an
+          // active company uses that account (the database already forbids sharing; this is the
+          // second lock, so one company's suspension can never switch off another company's calls).
+          const sharedWithActive =
+            company === 'suspended' &&
+            (
+              await Promise.all(
+                agents
+                  .filter((a) => a.id !== agent.id && a.agentAccount === agent.agentAccount)
+                  .map((a) => deps.businessStatus(a.businessId)),
+              )
+            ).includes('active');
+          if (sharedWithActive) {
+            log.error(`[w3id] ${agent.name}: AI account shared with an active company; not revoking.`);
+            continue;
+          }
           if (company === 'suspended' && status === 'active') {
             await change(agent, 'revoke', 'Company suspended in Cachet');
           } else if (company === 'active' && status === 'not_found') {

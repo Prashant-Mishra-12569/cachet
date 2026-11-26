@@ -11,6 +11,7 @@ export type AgentErrorCode =
   | 'agent_not_found'
   | 'agent_wrong_state'
   | 'number_in_use'
+  | 'agent_account_in_use'
   | 'too_many_agents'
   | 'company_never_calls'
   | 'tx_already_used'
@@ -172,7 +173,16 @@ export function createAgentService(deps: AgentServiceDeps) {
       }
       const used = await deps.agents.numbersInUse(input.callingNumbers);
       if (used.length > 0) throw new AgentError('number_in_use', used.join(', '));
-      return deps.agents.create({ ...input, businessId: business.id });
+      // Each AI caller has its own Concordium account, used by no other live AI caller.
+      if (await deps.agents.accountInUse(input.agentAccount)) throw new AgentError('agent_account_in_use');
+      try {
+        return await deps.agents.create({ ...input, businessId: business.id });
+      } catch (err) {
+        // Two requests at the same moment: the database rule is the final word.
+        if (err instanceof DuplicateError && err.column === 'agents_account_live_unique')
+          throw new AgentError('agent_account_in_use');
+        throw err;
+      }
     },
 
     /** Step 3a: the register transaction for the company's wallet. Mints the agent; sets agentWallet = company. */
@@ -263,6 +273,11 @@ export function createAgentService(deps: AgentServiceDeps) {
           e.metadataHash === pending.metadataHash,
       );
       if (!pinned) throw new AgentError('tx_mismatch', 'no URIUpdated event with the prepared URL and hash');
+      // Checked again now: another AI caller may have taken one of these numbers since prepare.
+      const taken = (await deps.agents.numbersInUse(pending.callingNumbers)).filter(
+        (n) => !agent.callingNumbers.includes(n),
+      );
+      if (taken.length > 0) throw new AgentError('number_in_use', taken.join(', '));
       return transition(agent, {
         callingNumbers: pending.callingNumbers,
         agentUri: pending.agentUri,

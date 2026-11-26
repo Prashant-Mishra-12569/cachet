@@ -308,3 +308,23 @@ describe('dashboard routes', () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('invalid_range');
   });
 });
+
+describe('reports about the company (privacy of the people who report)', () => {
+  it('gives totals per kind only: never which call, so the company cannot tell who reported', async () => {
+    const d = createDashboard({
+      source: {
+        ...fakeSource(),
+        reports: async () => [
+          { sealId: '01M8C3WHX53Z1ZNXK3TB79KBE2', reason: 'sealed_call:pressure', createdAt: new Date() },
+          { sealId: '01M8C3WHX53Z1ZNXK3TB79KBE3', reason: 'sealed_call:pressure', createdAt: new Date() },
+          { sealId: '01M8C3WHX53Z1ZNXK3TB79KBE4', reason: 'sealed_call:other', createdAt: new Date() },
+        ],
+      },
+      network: 'testnet',
+      webOrigin: 'https://getcachet.site',
+    });
+    const r = await d.reports('biz');
+    expect(r).toEqual({ total: 3, byKind: { pressure: 2, other: 1 } });
+    expect(JSON.stringify(r)).not.toContain('01M8C3WHX53Z1ZNXK3TB79KBE');
+  });
+});

@@ -5,7 +5,12 @@ import type { VerificationRequestJson, VerifierClient } from '../verify/verifier
 import type { BusinessRecord, BusinessRepo } from './repo';
 
 export type ProofErrorCode =
-  'proof_expired' | 'proof_failed' | 'proof_wrong_account' | 'proof_not_company' | 'proof_invalid';
+  | 'proof_expired'
+  | 'proof_failed'
+  | 'proof_wrong_account'
+  | 'proof_not_company'
+  | 'proof_invalid'
+  | 'proof_company_suspended';
 
 export class ProofError extends Error {
   constructor(
@@ -173,6 +178,13 @@ export function createCompanyProofService(deps: CompanyProofDeps) {
     const proofTx = response.anchorTransactionHash;
     if (!proofTx || !/^[0-9a-f]{64}$/i.test(proofTx)) {
       throw new ProofError('proof_failed', 'verifier returned no audit anchor transaction');
+    }
+
+    // A suspended company can't start fresh by proving itself again from another account: its
+    // suspension, its "never calls" promise and people's blocks all belong to the company.
+    const twins = await deps.repo.findByLegalIdentity(company.legalName, company.legalCountry);
+    if (twins.some((b) => b.status === 'suspended' && b.concordiumAccount !== account)) {
+      throw new ProofError('proof_company_suspended', `${company.legalName} (${company.legalCountry})`);
     }
 
     return deps.repo.upsertVerified({

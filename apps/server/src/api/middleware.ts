@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { getConnInfo } from '@hono/node-server/conninfo';
@@ -49,7 +51,32 @@ export interface RateLimitOptions {
   trustProxy: boolean;
 }
 
+/**
+ * Requests from the website reach us through its proxy (Vercel), so the connecting IP is the proxy's,
+ * shared by every visitor. The website's proxy sends the visitor's real IP plus a shared secret; we
+ * believe that IP only when the secret matches. Anyone else sending these headers is ignored.
+ */
+export const PROXY_SECRET_HEADER = 'x-cachet-proxy-secret';
+export const CLIENT_IP_HEADER = 'x-cachet-client-ip';
+const proxiedIp = new WeakMap<Request, string>();
+
+export function trustWebsiteProxy(secret: string | undefined): MiddlewareHandler {
+  const want = secret ? createHash('sha256').update(secret).digest() : null;
+  return async (c, next) => {
+    if (want) {
+      const got = c.req.header(PROXY_SECRET_HEADER);
+      const ip = c.req.header(CLIENT_IP_HEADER)?.trim() ?? '';
+      if (got && isIP(ip) && timingSafeEqual(createHash('sha256').update(got).digest(), want)) {
+        proxiedIp.set(c.req.raw, ip);
+      }
+    }
+    return next();
+  };
+}
+
 export function clientIp(c: Parameters<MiddlewareHandler>[0], trustProxy: boolean): string {
+  const viaWebsite = proxiedIp.get(c.req.raw);
+  if (viaWebsite) return viaWebsite;
   if (trustProxy) {
     const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
     if (forwarded) return forwarded;

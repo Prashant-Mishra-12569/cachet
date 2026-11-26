@@ -8,6 +8,7 @@ import { statusOf } from '../../seals/service';
 import type { ConsentsRepo } from '../consents-repo';
 import { ago, copy, esc, purposeWord } from '../copy';
 import type { PeopleRepo, PersonRow } from '../people-repo';
+import { errText } from '../../infra/err-text';
 
 export interface InfoDeps {
   people: PeopleRepo;
@@ -153,7 +154,7 @@ export function createInfoFeature(deps: InfoDeps) {
       let ended = 0;
       if (status === 'revoked' && deps.endSealsFrom) {
         ended = await deps.endSealsFrom(person.phoneHash, businessId).catch((err: unknown) => {
-          console.error('[bot] ending seals after block failed', err);
+          console.error('[bot] ending seals after block failed:', errText(err));
           return 0;
         });
       }

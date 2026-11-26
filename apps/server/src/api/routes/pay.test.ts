@@ -128,8 +128,46 @@ describe('safe payment: prepare', () => {
   it('limits tries per call (each prepared transfer is a fee Cachet may pay)', async () => {
     const t = await setup();
     const seal = await t.billSeal();
-    for (let i = 0; i < 5; i++) expect((await t.prepare(seal['sealId'])).status).toBe(200);
+    for (let i = 0; i < 5; i++) {
+      expect((await t.prepare(seal['sealId'])).status).toBe(200);
+      // The wallet sent it and it failed on chain: a new attempt is allowed (and counted).
+      const tx = String(i).repeat(64);
+      t.payChain.summaries.set(tx, { type: 'accountTransaction', transactionType: 'failed' });
+      await t.confirm(seal['sealId'], tx);
+    }
     expect(await errorCode(await t.prepare(seal['sealId']))).toBe('pay_too_many_attempts');
+    expect(t.payChain.built).toHaveLength(5);
+  });
+
+  it('a double tap or retry gets the SAME transfer back (so the bill can never be paid twice)', async () => {
+    const t = await setup();
+    const seal = await t.billSeal();
+    const a = (await (await t.prepare(seal['sealId'])).json()) as Json;
+    const b = (await (await t.prepare(seal['sealId'])).json()) as Json;
+    expect(b['transaction']).toBe(a['transaction']);
+    expect(t.payChain.built).toHaveLength(1);
+  });
+
+  it('after the wallet sent a transfer: still confirming → wait; it paid → no new transfer', async () => {
+    const t = await setup();
+    const seal = await t.billSeal();
+    expect((await t.prepare(seal['sealId'])).status).toBe(200);
+    expect((await t.confirm(seal['sealId'])).status).toBe(202); // sent, not final yet
+    t.clock.t += 6 * 60 * 1000; // the prepared transfer has expired
+    expect(await errorCode(await t.prepare(seal['sealId']))).toBe('pay_still_confirming');
+    t.payChain.summaries.set(TX, t.summary(seal['sealId']));
+    expect(await errorCode(await t.prepare(seal['sealId']))).toBe('pay_already_paid');
+    expect(t.payChain.built).toHaveLength(1);
+  });
+
+  it("refuses before building when the token's rules would reject it (the sponsor would pay for a failure)", async () => {
+    const t = await setup();
+    const seal = await t.billSeal();
+    t.payChain.rule = 'not_allowed';
+    expect(await errorCode(await t.prepare(seal['sealId']))).toBe('pay_not_allowed');
+    t.payChain.rule = 'paused';
+    expect(await errorCode(await t.prepare(seal['sealId']))).toBe('pay_closed');
+    expect(t.payChain.built).toHaveLength(0);
   });
 
   it('only one wallet at a time: a second wallet cannot start paying the same bill', async () => {

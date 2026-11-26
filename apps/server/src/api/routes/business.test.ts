@@ -239,6 +239,29 @@ describe('POST /v1/business/proof/verify', () => {
     expect(await errorCode(res)).toBe('proof_expired');
   });
 
+  it('a SUSPENDED company cannot start fresh by proving itself from another account', async () => {
+    const ctx = makeTestApp();
+    const p = companyPresentation();
+    // The same legal company, proven earlier from another account and suspended after reports.
+    const old = await ctx.repo.upsertVerified({
+      concordiumAccount: OTHER_ACCOUNT,
+      legalName: 'Northwind Energy BV',
+      legalCountry: 'NL',
+      issuer: 'did:ccd:testnet:idp:4',
+      proofTx: 'a'.repeat(64),
+      requestTx: 'b'.repeat(64),
+      verifiedAt: new Date(),
+    });
+    await ctx.repo.setStatus(old.id, 'suspended', 'reports', new Date());
+    const cookie = await signIn(ctx.app);
+    const { body } = await startProof(ctx.app, cookie);
+    const res = await ctx.app.request(
+      postJson('/v1/business/proof/verify', { proofId: body.proofId, presentation: p }, { cookie }),
+    );
+    expect(await errorCode(res)).toBe('proof_company_suspended');
+    expect(await ctx.repo.findByAccount(ACCOUNT)).toBeNull();
+  });
+
   it('proving again updates the company details', async () => {
     const ctx = makeTestApp();
     const cookie = await signIn(ctx.app);

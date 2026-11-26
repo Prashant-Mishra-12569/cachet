@@ -1,4 +1,4 @@
-import { businesses, eq, ledgerItems, sql, type Db } from '@cachet/db';
+import { and, businesses, eq, ledgerItems, sql, type Db } from '@cachet/db';
 import { randomBytes } from 'node:crypto';
 import { canonicalize, sha256Hex } from '@cachet/shared/seal';
 
@@ -30,6 +30,8 @@ export interface BusinessRepo {
   findById(id: string): Promise<BusinessRecord | null>;
   /** Verified companies whose legal name contains `query` (case-insensitive). */
   searchByName(query: string, limit: number): Promise<BusinessRecord[]>;
+  /** Every account that proved this exact legal identity (one company may use several accounts). */
+  findByLegalIdentity(legalName: string, legalCountry: string): Promise<BusinessRecord[]>;
   /** Create the business, or refresh its proven details if it proves again. */
   upsertVerified(input: VerifiedCompanyInput): Promise<BusinessRecord>;
   /**
@@ -83,6 +85,12 @@ export function createBusinessRepo(db: Db): BusinessRepo {
     async findById(id) {
       const rows = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
       return rows[0] ?? null;
+    },
+    async findByLegalIdentity(legalName, legalCountry) {
+      return db
+        .select()
+        .from(businesses)
+        .where(and(eq(businesses.legalName, legalName), eq(businesses.legalCountry, legalCountry)));
     },
     async upsertVerified(input) {
       const rows = await db
@@ -174,6 +182,8 @@ export function createMemoryBusinessRepo(): BusinessRepo {
   return {
     findByAccount: async (account) => byAccount.get(account) ?? null,
     findById: async (id) => [...byAccount.values()].find((b) => b.id === id) ?? null,
+    findByLegalIdentity: async (name, country) =>
+      [...byAccount.values()].filter((b) => b.legalName === name && b.legalCountry === country),
     searchByName: async (query, limit) =>
       [...byAccount.values()]
         .filter((b) => b.legalName.toLowerCase().includes(query.toLowerCase()))

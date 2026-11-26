@@ -10,6 +10,7 @@ import { and, apiKeys, desc, eq, isNull, sql, type Db } from '@cachet/db';
 export const API_KEY_PREFIX = 'cachet_ro_';
 export const MAX_ACTIVE_KEYS = 10;
 const KEY_FORMAT = /^cachet_ro_[A-Za-z0-9_-]{43}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const hashApiKey = (key: string) => createHash('sha256').update(key, 'utf8').digest('hex');
 
@@ -161,7 +162,8 @@ export function createApiKeys(deps: { repo: ApiKeyRepo; now?: () => Date }) {
     },
     list: (businessId: string) => deps.repo.listFor(businessId),
     async revoke(businessId: string, id: string) {
-      if (!(await deps.repo.revoke(businessId, id, now()))) throw new ApiKeyError('api_key_not_found');
+      if (!UUID.test(id) || !(await deps.repo.revoke(businessId, id, now())))
+        throw new ApiKeyError('api_key_not_found');
     },
     /** A presented key → its company, or null. Notes "last used" at most once a minute. */
     async verify(key: string): Promise<{ businessId: string } | null> {

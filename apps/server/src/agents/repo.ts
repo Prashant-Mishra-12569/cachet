@@ -87,6 +87,8 @@ export interface AgentRepo {
   transition(agentId: string, expectedStatus: AgentStatus, patch: AgentPatch): Promise<AgentRecord | null>;
   /** Which of these numbers are already used by another (non-revoked) agent? */
   numbersInUse(numbers: string[]): Promise<string[]>;
+  /** Is this AI account already used by a (non-revoked) agent of any company? */
+  accountInUse(agentAccount: string): Promise<boolean>;
 }
 
 const asRecord = (row: typeof agents.$inferSelect): AgentRecord => ({
@@ -132,9 +134,13 @@ export function createAgentRepo(db: Db): AgentRepo {
       return rows.map(asRecord);
     },
     async create(input) {
-      const rows = await db.insert(agents).values(input).returning();
-      if (!rows[0]) throw new Error('insert returned no row');
-      return asRecord(rows[0]);
+      try {
+        const rows = await db.insert(agents).values(input).returning();
+        if (!rows[0]) throw new Error('insert returned no row');
+        return asRecord(rows[0]);
+      } catch (err) {
+        rethrowDuplicate(err);
+      }
     },
     async transition(agentId, expectedStatus, patch) {
       try {
@@ -156,6 +162,14 @@ export function createAgentRepo(db: Db): AgentRepo {
         .where(and(arrayOverlaps(agents.callingNumbers, numbers), ne(agents.status, 'revoked')));
       const used = new Set(rows.flatMap((r) => r.numbers));
       return numbers.filter((n) => used.has(n));
+    },
+    async accountInUse(agentAccount) {
+      const rows = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.agentAccount, agentAccount), ne(agents.status, 'revoked')))
+        .limit(1);
+      return rows.length > 0;
     },
   };
 }
@@ -212,5 +226,7 @@ export function createMemoryAgentRepo(): AgentRepo & { rows: Map<string, AgentRe
       );
       return numbers.filter((n) => used.has(n));
     },
+    accountInUse: async (agentAccount) =>
+      [...rows.values()].some((a) => a.agentAccount === agentAccount && a.status !== 'revoked'),
   };
 }

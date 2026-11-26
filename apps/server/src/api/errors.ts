@@ -31,6 +31,11 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
     message:
       'The proof came from a different account than the one you signed in with. Sign in with your company account and try again.',
   },
+  proof_company_suspended: {
+    status: 403,
+    message:
+      'This company is suspended in Cachet after reports from people. Proving it again from another account does not lift that. Contact Cachet for a review.',
+  },
   proof_not_company: {
     status: 400,
     message:
@@ -58,6 +63,11 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
   number_in_use: {
     status: 409,
     message: 'One of these phone numbers is already used by another verified AI caller.',
+  },
+  agent_account_in_use: {
+    status: 409,
+    message:
+      'This AI account is already used by another AI caller. Each AI caller needs its own Concordium account.',
   },
   too_many_agents: { status: 409, message: 'You have reached the limit of AI callers for now.' },
   tx_already_used: { status: 409, message: 'That transaction was already used for another step.' },
@@ -202,6 +212,15 @@ const MESSAGES: Record<string, { status: ContentfulStatusCode; message: string }
   pay_mismatch: {
     status: 400,
     message: "That transaction isn't the payment for this call.",
+  },
+  pay_not_allowed: {
+    status: 400,
+    message:
+      "This test euro can only move between approved wallets, and this payment isn't approved yet. Nothing was paid.",
+  },
+  pay_still_confirming: {
+    status: 409,
+    message: 'Your last payment for this call is still being confirmed. Please wait a moment.',
   },
   tg_auth_failed: {
     status: 401,

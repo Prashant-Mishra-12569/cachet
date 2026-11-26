@@ -516,15 +516,18 @@ export function createDashboard(deps: DashboardDeps) {
       };
     },
 
+    /**
+     * Reports about the company's sealed calls: totals per kind only. Never which call (the company
+     * knows who each call went to), so people can report without fear of the company finding out.
+     */
     async reports(businessId: string) {
-      const list = await deps.source.reports(businessId, null, 200);
-      return {
-        reports: list.map((r) => ({
-          ...r,
-          createdAt: iso(r.createdAt),
-          publicUrl: `${deps.webOrigin}/v/${r.sealId}`,
-        })),
-      };
+      const list = await deps.source.reports(businessId, null, 1000);
+      const byKind: Record<string, number> = {};
+      for (const r of list) {
+        const kind = r.reason.replace(/^sealed_call:/, '');
+        byKind[kind] = (byKind[kind] ?? 0) + 1;
+      }
+      return { total: list.length, byKind };
     },
 
     /** Everything for one period, for the printable compliance report. */

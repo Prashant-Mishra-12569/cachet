@@ -244,6 +244,19 @@ describe('POST /v1/seals: refusals', () => {
     expect(ctx.sealRepo.sealRows.size).toBe(0);
   });
 
+  it('an IP that sends many forged or junk requests is stopped (real seals are not limited this way)', async () => {
+    const ctx = await setup();
+    // A busy AI caller: many good seals in a row are fine.
+    for (let i = 0; i < 12; i++) expect((await ctx.seal()).status).not.toBe(429);
+    for (let i = 0; i < 300; i++) {
+      expect((await ctx.app.request(postJson('/v1/seals', { request: {}, signature: SIG }))).status).toBe(
+        400,
+      );
+    }
+    // The failure budget is used up: even a genuine request from that IP now waits.
+    expect(await errorCode(await ctx.seal())).toBe('rate_limited');
+  });
+
   it('refuses unknown fields (the AI signs exactly what it sends)', async () => {
     const ctx = await setup();
     expect((await ctx.seal(ctx.request({ extra: 'x' }))).status).toBe(400);

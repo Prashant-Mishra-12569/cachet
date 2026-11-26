@@ -212,6 +212,8 @@ export function makeTestApp(
     balances: new Map<string, bigint>(),
     built: [] as { sender: string; recipient: string; amount: string; memo: string; tokenId: string }[],
     summaries: new Map<string, Record<string, unknown> | null>(),
+    /** What the token's own rules say about the next transfer (allow list, paused...). */
+    rule: 'ok' as 'ok' | 'not_allowed' | 'paused' | 'insufficient_funds',
   };
   const pay = createPayService({
     seals: sealRepo,
@@ -233,6 +235,7 @@ export function makeTestApp(
         };
       },
       finalizedSummary: async (txHash) => payChain.summaries.get(txHash) ?? null,
+      transferCheck: async () => payChain.rule,
     },
   });
   /** Fake x402 facilitator: decides verify/settle outcomes and records the calls, in order. */

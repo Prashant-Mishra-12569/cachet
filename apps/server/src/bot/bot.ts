@@ -3,6 +3,7 @@ import { Bot, InlineKeyboard, Keyboard, type Context } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
 import { normalizeE164, phoneHash, type Seal } from '@cachet/shared/seal';
 import type { AgentRepo } from '../agents/repo';
+import { errText } from '../infra/err-text';
 import type { BusinessRepo } from '../business/repo';
 import type { KvStore } from '../infra/kv';
 import type { SealRepo } from '../seals/repo';
@@ -132,7 +133,7 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
       // Tell the people who protect this person (only those they allowed).
       await family
         .alertGuardians(bot, person)
-        .catch((err: unknown) => console.error('[bot] guardian alert failed', err));
+        .catch((err: unknown) => console.error('[bot] guardian alert failed:', errText(err)));
       return;
     }
     const lines = open.slice(0, 3).map((row) => {
@@ -260,11 +261,11 @@ export function createBot(token: string, deps: BotDeps, options: { botInfo?: Use
     await ctx.reply(reply, { parse_mode: 'HTML' });
     await family
       .alertGuardiansClaimed(bot, person, match?.legalName ?? claimed)
-      .catch((err: unknown) => console.error('[bot] guardian alert failed', err));
+      .catch((err: unknown) => console.error('[bot] guardian alert failed:', errText(err)));
   });
 
   bot.catch((err) => {
-    console.error(`[bot] error while handling update ${err.ctx.update.update_id}:`, err.error);
+    console.error(`[bot] error while handling update ${err.ctx.update.update_id}:`, errText(err.error));
   });
 
   return bot;
@@ -288,7 +289,7 @@ export async function startBotPolling(
   await bot.init();
   await bot.api
     .setMyCommands(BOT_COMMANDS)
-    .catch((err: unknown) => console.error('[bot] setMyCommands failed', err));
+    .catch((err: unknown) => console.error('[bot] setMyCommands failed:', errText(err)));
   // The chat's menu button opens the Mini App; without one, it shows the command list again
   // (so an old, dead tunnel address never stays on people's screens).
   await bot.api
@@ -297,7 +298,7 @@ export async function startBotPolling(
         ? { type: 'web_app', text: copy.menuButton, web_app: { url: `${options.miniAppUrl}/tg` } }
         : { type: 'commands' },
     })
-    .catch((err: unknown) => console.error('[bot] setChatMenuButton failed', err));
+    .catch((err: unknown) => console.error('[bot] setChatMenuButton failed:', errText(err)));
   if (options.miniAppUrl) console.log(`[bot] Mini App: ${options.miniAppUrl}/tg`);
   console.log(`[bot] @${bot.botInfo.username} connected (long polling)`);
   // Don't await: start() resolves only when the bot stops.
@@ -309,7 +310,7 @@ export async function startBotPolling(
       conflict
         ? '[bot] stopped: another copy of this bot is already running (two "pnpm dev"?). Stop the other one.'
         : '[bot] stopped with an error:',
-      conflict ? '' : err,
+      conflict ? '' : errText(err),
     );
   });
 }

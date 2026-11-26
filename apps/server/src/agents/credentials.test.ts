@@ -51,6 +51,7 @@ const agent = (id: string, businessId = 'biz'): AgentRecord =>
 function issuer(
   statuses: Record<string, CredentialStatus>,
   companies: Record<string, 'active' | 'suspended'>,
+  live: AgentRecord[] = [agent('A', 'bizA'), agent('B', 'bizB'), agent('C', 'bizC')],
 ) {
   const { c } = checker(statuses);
   const sent: string[] = [];
@@ -71,7 +72,7 @@ function issuer(
         return true;
       },
     },
-    agents: { listActive: async () => [agent('A', 'bizA'), agent('B', 'bizB'), agent('C', 'bizC')] },
+    agents: { listActive: async () => live },
     businessStatus: async (id) => companies[id] ?? null,
     log: { log: () => undefined, error: () => undefined },
   });
@@ -89,6 +90,18 @@ describe('credential issuer (background job)', () => {
       'credential_registry.registerCredential',
       'credential_registry.revokeCredentialIssuer',
     ]);
+  });
+
+  it("never revokes a credential while an ACTIVE company's AI caller uses the same account", async () => {
+    // A suspended company somehow holds another company's AI account (the database forbids it): the
+    // other company's calls must not be switched off by that suspension.
+    const shared = { ...agent('X', 'bizBad'), id: 'x2' } as AgentRecord;
+    const { job, sent } = issuer({ X: 'active' }, { bizGood: 'active', bizBad: 'suspended' }, [
+      agent('X', 'bizGood'),
+      shared,
+    ]);
+    await job.tick();
+    expect(sent).toEqual([]);
   });
 
   it('never sends the same change twice while one is in progress', async () => {

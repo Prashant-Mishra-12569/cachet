@@ -10,7 +10,8 @@ import type { SealRepo } from '../../seals/repo';
 import { SealError, type SealService } from '../../seals/service';
 import type { SealBilling } from '../../x402/billing';
 import { apiError } from '../errors';
-import { rateLimit } from '../middleware';
+import { clientIp, rateLimit } from '../middleware';
+import type { MiddlewareHandler } from 'hono';
 import { PAYMENT_RESPONSE, PAYMENT_SIGNATURE, billingFail, paymentRequired } from './credits';
 
 export interface SealRouteDeps {
@@ -65,10 +66,46 @@ const CloseRequestSchema = z
 
 const Envelope = z.object({ request: z.unknown(), signature: z.unknown() });
 
+/**
+ * Real AI callers send many seals from one server (a voice platform), and every seal is paid for, so
+ * successful requests only get a generous flood cap. What attackers produce is FAILURES (forged or
+ * replayed requests, unknown agents): those have their own small budget per IP.
+ */
+const FLOOD_CAP_PER_10_MIN = 36_000; // 60 per second
+const FAILURES_PER_10_MIN = 300;
+const ATTACK_LIKE = new Set([
+  'invalid_request',
+  'seal_stale',
+  'seal_replay',
+  'seal_bad_signature',
+  'agent_unknown',
+  'agent_account_mismatch',
+  'seal_not_found',
+]);
+
+function failureBudget(kv: KvStore, trustProxy: boolean): MiddlewareHandler {
+  return async (c, next) => {
+    const key = `rl:seal-fail:${clientIp(c, trustProxy)}:${Math.floor(Date.now() / 600_000)}`;
+    if (Number((await kv.get(key)) ?? 0) >= FAILURES_PER_10_MIN) {
+      c.header('Retry-After', '600');
+      return apiError(c, 'rate_limited');
+    }
+    await next();
+    if (c.res.status >= 400 && c.res.status < 500) {
+      const body = (await c.res
+        .clone()
+        .json()
+        .catch(() => null)) as { error?: { code?: string } } | null;
+      if (ATTACK_LIKE.has(body?.error?.code ?? '')) await kv.incr(key, 600);
+    }
+  };
+}
+
 export function sealRoutes(deps: SealRouteDeps) {
   const app = new Hono();
   const limit = (name: string, max: number) =>
     rateLimit({ kv: deps.kv, name, limit: max, windowSeconds: 600, trustProxy: deps.trustProxy });
+  const failures = failureBudget(deps.kv, deps.trustProxy);
 
   async function parse<T>(c: { req: { json: () => Promise<unknown> } }, schema: z.ZodType<T>) {
     const env = Envelope.safeParse(await c.req.json().catch(() => null));
@@ -91,7 +128,8 @@ export function sealRoutes(deps: SealRouteDeps) {
   app.post(
     '/',
     bodyLimit({ maxSize: 16 * 1024, onError: (c) => apiError(c, 'invalid_request') }),
-    limit('seal-issue', 600),
+    limit('seal-issue', FLOOD_CAP_PER_10_MIN),
+    failures,
     async (c) => {
       const body = await parse(c, SealRequestSchema);
       if (!body) return apiError(c, 'invalid_request');
@@ -139,7 +177,8 @@ export function sealRoutes(deps: SealRouteDeps) {
   app.post(
     '/:id/close',
     bodyLimit({ maxSize: 8 * 1024, onError: (c) => apiError(c, 'invalid_request') }),
-    limit('seal-close', 600),
+    limit('seal-close', FLOOD_CAP_PER_10_MIN),
+    failures,
     async (c) => {
       const body = await parse(c, CloseRequestSchema);
       if (!body || body.request.sealId !== c.req.param('id')) return apiError(c, 'invalid_request');

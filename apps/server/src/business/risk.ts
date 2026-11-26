@@ -47,7 +47,9 @@ export function createRiskSource(db: Db): RiskSource {
           (select count(distinct r.person_id) from reports r join seals s on s.id = r.seal_id
              where s.business_id = ${businessId}::uuid and r.reason like 'sealed_call:%'
                and r.created_at >= ${since.toISOString()}::timestamptz) as reporters,
-          (select count(distinct s.phone_hash) from seals s
+          -- Only people on Cachet (they are the ones who can see a card and report). Counting every number
+          -- dialled would let a bad company raise its own threshold by sealing calls to random numbers.
+          (select count(distinct s.phone_hash) from seals s join people p on p.phone_hash = s.phone_hash
              where s.business_id = ${businessId}::uuid and s.issued_at >= ${since.toISOString()}::timestamptz) as called`);
       const row = (result.rows[0] ?? {}) as Record<string, unknown>;
       return { reporters: Number(row['reporters'] ?? 0), called: Number(row['called'] ?? 0) };
