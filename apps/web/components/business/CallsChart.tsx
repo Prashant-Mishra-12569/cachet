@@ -54,7 +54,7 @@ export function CallsChart({ days }: { days: Day[] }) {
               className="absolute right-0 -translate-y-1/2"
               style={{ top: `${100 - (t / top) * 100}%` }}
             >
-              {t}
+              {t.toLocaleString('en')}
             </span>
           ))}
         </div>

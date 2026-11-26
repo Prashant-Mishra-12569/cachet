@@ -78,7 +78,7 @@ export function CompanyProof({
             href={business.proofTxUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-seal underline underline-offset-2"
+            className="inline-block py-3 -my-3 font-medium text-seal underline underline-offset-2"
           >
             Proof record ↗
           </a>
@@ -86,7 +86,7 @@ export function CompanyProof({
             href={business.requestTxUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-ink-2 underline underline-offset-2"
+            className="inline-block py-3 -my-3 text-ink-2 underline underline-offset-2"
           >
             Request record ↗
           </a>

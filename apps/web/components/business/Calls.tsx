@@ -85,7 +85,7 @@ export function Calls() {
       ) : (
         <>
           {/* wide screens: a table */}
-          <div className={`${card} hidden overflow-x-auto p-0 md:block sm:p-0`}>
+          <div className={`${card} relative hidden overflow-x-auto p-0 md:block sm:p-0`}>
             <table className="w-full text-left text-[14px]">
               <caption className="sr-only">Sealed calls, newest first</caption>
               <thead className="text-ink-2">
@@ -121,7 +121,7 @@ export function Calls() {
                         href={c.publicUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:underline"
+                        className="inline-block py-3 -my-3 hover:underline"
                       >
                         {when(c.issuedAt)}
                       </a>

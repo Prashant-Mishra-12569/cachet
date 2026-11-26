@@ -207,15 +207,27 @@ html {
   .hero-demo {
     zoom: 0.82;
   }
+  /* the controls stay a full 44 px tap target after the zoom */
+  .hero-demo .demo-control {
+    min-height: calc(44px / 0.82);
+  }
 }
 @media (min-width: 1024px) and (max-height: 719px) {
   .hero-demo {
     zoom: 0.72;
   }
+  /* the controls stay a full 44 px tap target after the zoom */
+  .hero-demo .demo-control {
+    min-height: calc(44px / 0.72);
+  }
 }
 @media (min-width: 1024px) and (max-height: 651px) {
   .hero-demo {
     zoom: 0.64;
+  }
+  /* the controls stay a full 44 px tap target after the zoom */
+  .hero-demo .demo-control {
+    min-height: calc(44px / 0.64);
   }
 }
 

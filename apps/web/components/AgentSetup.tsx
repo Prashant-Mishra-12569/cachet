@@ -441,7 +441,7 @@ function AgentCard({
               href={agent.registerTxUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-seal underline"
+              className="inline-block py-3 -my-3 text-seal underline"
             >
               record ↗
             </a>
@@ -459,7 +459,7 @@ function AgentCard({
               href={agent.cardTxUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-seal underline"
+              className="inline-block py-3 -my-3 text-seal underline"
             >
               record ↗
             </a>
@@ -486,12 +486,22 @@ function AgentCard({
           </p>
           <p className="flex flex-wrap gap-x-4 text-ink-2">
             {agent.agentUri && (
-              <a href={agent.agentUri} target="_blank" rel="noopener noreferrer" className="underline">
+              <a
+                href={agent.agentUri}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block py-3 -my-3 underline"
+              >
                 Agent Card ↗
               </a>
             )}
             {agent.badgeCheckUrl && (
-              <a href={agent.badgeCheckUrl} target="_blank" rel="noopener noreferrer" className="underline">
+              <a
+                href={agent.badgeCheckUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block py-3 -my-3 underline"
+              >
                 Badge check ↗
               </a>
             )}

@@ -115,7 +115,7 @@ export default function ComplianceReportPage() {
         )}
 
         <Section title="1. Who made the calls">
-          <dl className="grid grid-cols-[9.5rem_1fr] gap-x-6 gap-y-1">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-[9.5rem_minmax(0,1fr)] [&_dd]:[overflow-wrap:anywhere]">
             <dt className="text-ink-2">Company</dt>
             <dd className="font-semibold">{r.company.legalName}</dd>
             <dt className="text-ink-2">Country</dt>
@@ -133,7 +133,10 @@ export default function ComplianceReportPage() {
             </dd>
           </dl>
           {r.agents.map((a) => (
-            <dl key={a.name} className="mt-4 grid grid-cols-[9.5rem_1fr] gap-x-6 gap-y-1">
+            <dl
+              key={a.name}
+              className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-[9.5rem_minmax(0,1fr)] [&_dd]:[overflow-wrap:anywhere]"
+            >
               <dt className="text-ink-2">AI caller</dt>
               <dd className="font-semibold">
                 {a.name} ({a.status === 'active' ? 'switched on' : a.status})
@@ -237,26 +240,28 @@ export default function ComplianceReportPage() {
           {r.records.length === 0 ? (
             <p className="mt-2 text-ink-2">No records in this period yet.</p>
           ) : (
-            <table className="mt-3 w-full text-[13px] tabular-nums">
-              <thead>
-                <tr>
-                  <th className={th}>Record transaction</th>
-                  <th className={`${th} text-right`}>Items from these calls</th>
-                  <th className={th}>Final since</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.records.map((a, i) => (
-                  <tr key={a.txHash ?? i}>
-                    <td className={td}>
-                      {a.txHash && a.txUrl ? <Tx url={a.txUrl} hash={a.txHash} /> : 'pending'}
-                    </td>
-                    <td className={`${td} text-right`}>{a.items}</td>
-                    <td className={td}>{a.finalizedAt ? stamp(a.finalizedAt) : a.status}</td>
+            <div className="mt-3 overflow-x-auto print:overflow-visible">
+              <table className="w-full text-[13px] tabular-nums">
+                <thead>
+                  <tr>
+                    <th className={th}>Record transaction</th>
+                    <th className={`${th} text-right`}>Items from these calls</th>
+                    <th className={th}>Final since</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {r.records.map((a, i) => (
+                    <tr key={a.txHash ?? i}>
+                      <td className={td}>
+                        {a.txHash && a.txUrl ? <Tx url={a.txUrl} hash={a.txHash} /> : 'pending'}
+                      </td>
+                      <td className={`${td} text-right`}>{a.items}</td>
+                      <td className={td}>{a.finalizedAt ? stamp(a.finalizedAt) : a.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Section>
 
@@ -265,43 +270,46 @@ export default function ComplianceReportPage() {
             People are shown as a person code, never a phone number: Cachet does not keep the numbers called,
             and each company gets its own codes.
           </p>
-          <table className="mt-3 w-full text-[12px] tabular-nums">
-            <thead>
-              <tr>
-                <th className={th}>When (UTC)</th>
-                <th className={th}>Person</th>
-                <th className={th}>Reason</th>
-                <th className={th}>Outcome</th>
-                <th className={th}>AI disclosure</th>
-                <th className={th}>Consent</th>
-                <th className={th}>Record</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.calls.map((c) => (
-                <tr key={c.id} className="break-inside-avoid">
-                  <td className={`${td} whitespace-nowrap`}>{stamp(c.issuedAt).replace(' UTC', '')}</td>
-                  <td className={`${td} font-mono`}>{c.person}</td>
-                  <td className={td}>
-                    {c.message}
-                    {c.amount ? ` (${money(c.amount.value, c.amount.asset, true)})` : ''}
-                  </td>
-                  <td className={td}>{c.outcomeText}</td>
-                  <td className={td}>In seal</td>
-                  <td className={td}>{c.consent === 'granted' ? 'Allowed' : 'Not recorded'}</td>
-                  <td className={`${td} font-mono`}>
-                    {c.record.status === 'finalized' ? (
-                      <a href={c.record.txUrl} className="underline">
-                        {c.record.txHash.slice(0, 8)}
-                      </a>
-                    ) : (
-                      'pending'
-                    )}
-                  </td>
+          {/* A phone screen can't fit 7 columns: scroll sideways there; paper gets the full table. */}
+          <div className="mt-3 overflow-x-auto print:overflow-visible">
+            <table className="w-full text-[12px] tabular-nums">
+              <thead>
+                <tr>
+                  <th className={th}>When (UTC)</th>
+                  <th className={th}>Person</th>
+                  <th className={th}>Reason</th>
+                  <th className={th}>Outcome</th>
+                  <th className={th}>AI disclosure</th>
+                  <th className={th}>Consent</th>
+                  <th className={th}>Record</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {r.calls.map((c) => (
+                  <tr key={c.id} className="break-inside-avoid">
+                    <td className={`${td} whitespace-nowrap`}>{stamp(c.issuedAt).replace(' UTC', '')}</td>
+                    <td className={`${td} font-mono`}>{c.person}</td>
+                    <td className={td}>
+                      {c.message}
+                      {c.amount ? ` (${money(c.amount.value, c.amount.asset, true)})` : ''}
+                    </td>
+                    <td className={td}>{c.outcomeText}</td>
+                    <td className={td}>In seal</td>
+                    <td className={td}>{c.consent === 'granted' ? 'Allowed' : 'Not recorded'}</td>
+                    <td className={`${td} font-mono`}>
+                      {c.record.status === 'finalized' ? (
+                        <a href={c.record.txUrl} className="underline">
+                          {c.record.txHash.slice(0, 8)}
+                        </a>
+                      ) : (
+                        'pending'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {r.callsTruncated ? (
             <p className="mt-2 text-ink-2">
               Only the latest {r.calls.length} calls are listed. Download the CSV for the full list.

@@ -68,6 +68,12 @@ export function BusinessDashboard({ account, onSignOut }: { account: string; onS
   // No tab chosen yet: a live AI caller → Overview; otherwise Setup.
   const live = summary?.agents.some((a) => a.status === 'active') ?? false;
   const current: Tab = tab ?? (summary && !live ? 'setup' : 'overview');
+  // On a phone the tab bar scrolls sideways: keep the open tab in view (Setup is the last one).
+  useEffect(() => {
+    document
+      .querySelector('nav[aria-label="Dashboard"] [aria-current="page"]')
+      ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [current]);
   const choose = (t: Tab) => {
     window.history.pushState(null, '', `#${t}`);
     setTab(t);

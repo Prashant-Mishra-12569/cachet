@@ -39,7 +39,15 @@ export default async function StatusPage() {
   const [health, stats] = await Promise.all([getHealth(), getPublicStats()]);
   const part = (k: string): State => (!health ? 'unknown' : health[k] === 'ok' ? 'ok' : 'down');
   const api: State = health?.ok ? 'ok' : 'unknown';
-  const all = [api, part('database'), part('redis'), part('verifier')];
+  // Older servers don't report the sponsor yet: then it isn't shown.
+  const hasSponsor = Boolean(health && 'sponsor' in health);
+  const all = [
+    api,
+    part('database'),
+    part('redis'),
+    part('verifier'),
+    ...(hasSponsor ? [part('sponsor')] : []),
+  ];
   const overall = all.every((s) => s === 'ok') ? 'ok' : all.some((s) => s === 'down') ? 'down' : 'unknown';
 
   return (
@@ -67,13 +75,20 @@ export default async function StatusPage() {
           what="Checks companies' private proofs from Concordium ID"
           state={part('verifier')}
         />
+        {hasSponsor ? (
+          <Row
+            name="Fee sponsor"
+            what="Pays the fees for safe payments and the permanent record, so people pay none"
+            state={part('sponsor')}
+          />
+        ) : null}
       </ul>
 
       <Block title="Permanent record">
         {stats?.lastRecord ? (
           <p>
             Latest record written on Concordium <LocalTime iso={stats.lastRecord.at} />, holding{' '}
-            {stats.lastRecord.items} {stats.lastRecord.items === 1 ? 'item' : 'items'}.{' '}
+            {stats.lastRecord.items.toLocaleString('en')} {stats.lastRecord.items === 1 ? 'item' : 'items'}.{' '}
             <a
               href={stats.lastRecord.txUrl}
               target="_blank"
@@ -82,8 +97,9 @@ export default async function StatusPage() {
             >
               See it on the explorer
             </a>
-            . New calls join the record within about 5 minutes. {stats.sealsInPublicRecord} of{' '}
-            {stats.sealsTotal} sealed calls are in it now.
+            . New calls join the record within about 5 minutes.{' '}
+            {stats.sealsInPublicRecord.toLocaleString('en')} of {stats.sealsTotal.toLocaleString('en')} sealed
+            calls are in it now.
           </p>
         ) : (
           <p>No record information right now.</p>

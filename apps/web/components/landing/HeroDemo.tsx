@@ -41,7 +41,7 @@ export function HeroDemo() {
             type="button"
             aria-pressed={mode === m}
             onClick={() => choose(m)}
-            className={`min-h-11 rounded-full px-4 font-medium transition-colors ${
+            className={`demo-control min-h-11 rounded-full px-4 font-medium transition-colors ${
               mode === m
                 ? m === 'real'
                   ? 'bg-seal text-white'
@@ -64,7 +64,7 @@ export function HeroDemo() {
         <button
           type="button"
           onClick={() => setRun((r) => r + 1)}
-          className="min-h-11 shrink-0 rounded-full px-3 font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
+          className="demo-control min-h-11 shrink-0 rounded-full px-3 font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
         >
           Play again
         </button>

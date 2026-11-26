@@ -141,7 +141,6 @@ function LiveCall({ call }: { call: Call }) {
   return (
     <Link
       href={`/tg/seal/${call.sealId}`}
-      aria-label={`Verified call from ${call.company}. Open details.`}
       className="tg-card relative block overflow-hidden border-seal/30 bg-seal-soft active:scale-[0.99]"
     >
       <WaxSeal

@@ -72,7 +72,9 @@ export function ExtLink({ href, children }: { href: string; children: ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
+      // relative: keeps the hidden "(opens in a new tab)" inside the link (it widened tables);
+      // py-3/-my-3: a 44 px tall tap area without moving the text around it.
+      className="relative inline-block py-3 -my-3 font-medium text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
     >
       {children}
       <span className="sr-only"> (opens in a new tab)</span>

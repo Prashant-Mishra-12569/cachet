@@ -56,7 +56,12 @@ const TONE = { k: 'text-[#c792ea]', s: 'text-[#a5e3b8]', c: 'text-white/45', t: 
 
 function Snippet() {
   return (
-    <pre className="overflow-x-auto rounded-[22px] bg-night p-5 text-[13.5px] leading-[1.7] text-white/90 sm:p-6 sm:text-[14.5px]">
+    <pre
+      tabIndex={0}
+      role="region"
+      aria-label="Code: seal a call with the Cachet SDK"
+      className="overflow-x-auto rounded-[22px] bg-night p-5 text-[13.5px] leading-[1.7] text-white/90 sm:p-6 sm:text-[14.5px]"
+    >
       <code className="font-mono">
         {CODE.map((line, i) => (
           <span key={i} className="block min-h-[1.7em] whitespace-pre">

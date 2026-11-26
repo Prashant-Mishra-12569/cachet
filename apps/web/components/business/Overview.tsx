@@ -13,7 +13,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
   const c = summary.calls;
   const agent = summary.agents.find((a) => a.status === 'active') ?? summary.agents[0];
   const collected = summary.payments.collected;
-  const rangText = (n: number) => `${n} ${n === 1 ? 'call' : 'calls'}`;
+  const rangText = (n: number) => `${nf.format(n)} ${n === 1 ? 'call' : 'calls'}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -79,7 +79,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
           hero
           label={`Calls sealed, last ${summary.period.days} days`}
           value={nf.format(c.total)}
-          note={c.inProgress > 0 ? `${c.inProgress} in progress right now` : undefined}
+          note={c.inProgress > 0 ? `${nf.format(c.inProgress)} in progress right now` : undefined}
         />
         <Stat
           label="Picked up"
@@ -87,7 +87,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
           note={
             summary.pickupRate === null
               ? 'Shown once calls have rung through.'
-              : `${c.answered} of ${rangText(c.answered + c.notAnswered)} that rang through`
+              : `${nf.format(c.answered)} of ${rangText(c.answered + c.notAnswered)} that rang through`
           }
         />
         <Stat
@@ -103,7 +103,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
           note={
             summary.credits.daysLeft === null
               ? '€0.01 each. Your AI buys more by itself.'
-              : `About ${nf.format(summary.credits.daysLeft)} days at your current pace`
+              : `About ${nf.format(summary.credits.daysLeft)} ${summary.credits.daysLeft === 1 ? 'day' : 'days'} at your current pace`
           }
         />
       </div>
@@ -117,7 +117,7 @@ export function Overview({ business, summary }: { business: BusinessView; summar
           <Stat
             label={`People who reported your calls, ${summary.risk.windowDays} days`}
             value={nf.format(summary.risk.reporters)}
-            note={`Automatic suspension at ${summary.risk.suspendAt} people (of ${summary.risk.called} you called).`}
+            note={`Automatic suspension at ${nf.format(summary.risk.suspendAt)} people (of ${nf.format(summary.risk.called)} people on Cachet you called).`}
           />
         ) : null}
         <Stat

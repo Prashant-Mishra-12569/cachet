@@ -31,7 +31,13 @@ function Code({ children, label }: { children: string; label?: string }) {
   return (
     <figure className="my-4 min-w-0">
       {label ? <figcaption className="mb-1.5 text-[13px] text-ink-2">{label}</figcaption> : null}
-      <pre className="overflow-x-auto rounded-[16px] bg-night p-4 text-[13px] leading-[1.65] text-white/90 sm:p-5">
+      {/* tabIndex: code that scrolls sideways must be reachable by keyboard too. */}
+      <pre
+        tabIndex={0}
+        role="region"
+        aria-label={label ?? 'Code example'}
+        className="overflow-x-auto rounded-[16px] bg-night p-4 text-[13px] leading-[1.65] text-white/90 sm:p-5"
+      >
         <code className="font-mono">{children.trim()}</code>
       </pre>
     </figure>
@@ -120,7 +126,21 @@ const THREATS: [string, string, 'built' | 'planned'][] = [
     '/check works only for the number you shared from your own Telegram account.',
     'built',
   ],
-  ['Flooding the seal API', 'Every seal costs €0.01 (x402), plus per-IP rate limits.', 'built'],
+  [
+    'Flooding the seal API',
+    'Every seal costs €0.01 (x402). Forged, replayed or unknown requests get a small budget per IP address (300 per 10 minutes); real seals are only capped at 60 per second.',
+    'built',
+  ],
+  [
+    'Leaking who called whom',
+    'Seal pages never show a phone number or a code. Companies see a private code per person, never numbers. Server logs never hold codes or numbers.',
+    'built',
+  ],
+  [
+    'Hiding Cachet inside another website (clickjacking)',
+    'No other website may show Cachet’s pages inside its own (only Telegram may show the Mini App), and a strict content policy blocks code from other sites.',
+    'built',
+  ],
   [
     'Fake Cachet bot',
     'The bot never asks for codes, passwords or seed phrases; the website names the one official bot.',
@@ -128,8 +148,8 @@ const THREATS: [string, string, 'built' | 'planned'][] = [
   ],
   [
     'A verified company turns rogue',
-    'People can report and block; records can’t be deleted. Automatic suspension from report patterns is planned.',
-    'planned',
+    'People report calls. When at least 5 different people (and 10% of the people it called in 7 days) report it, Cachet suspends the company at once: open calls end and new seals are refused. Records can’t be deleted.',
+    'built',
   ],
   [
     'Telegram account takeover or SIM swap',
@@ -388,9 +408,10 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
 
           <H2 id="mcp">Use it from an AI agent (MCP)</H2>
           <P>
-            The Cachet MCP server lets any agent that speaks the Model Context Protocol (Claude, LangChain,
-            voice-AI platforms) seal its calls by itself. It runs next to your agent, holds the AI&apos;s key
-            locally and pays for seals with x402 (at most €0.05 per payment by default).
+            The Cachet MCP server lets any agent that speaks the Model Context Protocol (desktop AI
+            assistants, LangChain, voice-AI platforms) seal its calls by itself. It runs next to your agent,
+            holds the AI&apos;s key locally and pays for seals with x402 (at most €0.05 per payment by
+            default).
           </P>
           <ul className="mt-3 max-w-[68ch] list-disc space-y-1.5 pl-5 text-[16px] leading-relaxed text-ink-2">
             <li>
@@ -407,7 +428,7 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
               <C>cachet_check_seal</C>: what Cachet checked for one seal.
             </li>
           </ul>
-          <Code label="Claude Desktop (claude_desktop_config.json) or any MCP client">{`
+          <Code label="Your MCP client's settings (the usual mcpServers format)">{`
 {
   "mcpServers": {
     "cachet": {
@@ -473,10 +494,20 @@ Authorization: Bearer cachet_ro_…              120 requests per 10 minutes per
               </tbody>
             </table>
           </div>
-          <P>Rate limits: 600 seal requests and 600 closes per 10 minutes per IP address.</P>
+          <P>
+            Rate limits per IP address: up to 60 seal requests and 60 closes per second; forged, replayed or
+            unknown requests: 300 per 10 minutes.
+          </P>
 
           <H2 id="threats">Threat model</H2>
           <P>How each attack is stopped today, and what is still planned.</P>
+          <P>
+            Tested: 1,000 simulated calls (real calls, spoofed numbers, replayed and forged requests, expired
+            and ended seals, a scammer calling during a real call, a switched-off AI caller, a suspended
+            company, the wrong person, and people probing others’ calls) gave{' '}
+            <strong className="text-ink">0 false greens</strong>. Under load, 50 seals per second for two
+            minutes were all issued, 95% within 131 ms (on a laptop test setup).
+          </P>
           <ul className="mt-4 grid gap-3 md:grid-cols-2">
             {THREATS.map(([attack, defence, state]) => (
               <li key={attack} className="rounded-[16px] border border-line bg-surface p-4">
