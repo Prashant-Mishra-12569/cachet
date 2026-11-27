@@ -21,8 +21,9 @@
 <p align="center">
   <img alt="Concordium testnet" src="https://img.shields.io/badge/Concordium-testnet-0F6B4F">
   <img alt="Red team: 0 false greens in 1,000 calls" src="https://img.shields.io/badge/red%20team-0%20false%20greens%20%2F%201%2C000%20calls-0F6B4F">
-  <img alt="Tests: 471 passing" src="https://img.shields.io/badge/tests-471%20passing-0F6B4F">
+  <img alt="Tests: 479 passing" src="https://img.shields.io/badge/tests-479%20passing-0F6B4F">
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0F6B4F">
 </p>
 
 ![Cachet website: a verified call arrives in Telegram with a code, and the AI says the same code](docs/images/landing.png)
@@ -36,6 +37,7 @@
 - [What it looks like](#what-it-looks-like)
 - [How a real call works](#how-a-real-call-works)
 - [How a scam call fails](#how-a-scam-call-fails)
+- [Agents checking agents](#agents-checking-agents)
 - [Built on Concordium](#built-on-concordium) (every component, where it is used, and proof)
 - [Proof on the chain](#proof-on-the-chain)
 - [Does it work?](#does-it-work)
@@ -44,6 +46,7 @@
 - [For companies and developers](#for-companies-and-developers)
 - [Path to production](#path-to-production)
 - [Run it yourself](#run-it-yourself)
+- [Why not something else?](#why-not-something-else)
 - [What is not done yet](#what-is-not-done-yet)
 
 ---
@@ -145,23 +148,53 @@ that proved its identity, registered its AI caller on Concordium and paid for th
 call, the bot asks who the caller claimed to be. If that company has told Cachet it **never** makes AI calls, the
 person is told straight away that it is a scam, and the company sees "scam calls using your name" on its dashboard.
 
+## Agents checking agents
+
+More and more calls are answered by an **AI**, too: a company's AI receptionist, or a person's own AI assistant. Cachet
+lets that answering agent check the calling agent before trusting it, with the Cachet MCP tool
+`cachet_verify_incoming_call`:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AI as Calling AI (company)
+    participant R as Answering AI (receptionist or assistant)
+    participant C as Cachet
+    participant REG as Concordium Agent Registry
+    AI->>R: "Hi, this is Northwind Energy BV's AI assistant. Your Cachet code is four-five, one-two."
+    R->>C: Is there a sealed call to my number with code 45-12?
+    C-->>R: Yes, Northwind Energy BV, AI caller "Northwind billing assistant", badge JyP9…
+    R->>REG: check-badge JyP9… (directly, without trusting Cachet)
+    REG-->>R: badge_valid true
+    R->>R: Verified, so pass the call on. Otherwise, treat it as a scam.
+```
+
+- The answering agent needs **no Cachet account and no key**: the MCP server runs in "receptionist mode".
+- The second check goes **straight to Concordium's Agent Registry**, so one agent verifies another's Verified badge
+  on chain.
+- It also protects people who never joined Cachet on Telegram: their assistant checks for them.
+- A wrong code, another number or an ended call gets a plain "not verified"; guessing is limited to 10 tries per number.
+
+Try it: `pnpm mcp:example +31612345678` runs a calling agent and a separate receptionist agent: the real code is
+verified, a guessed one is refused.
+
 ## Built on Concordium
 
 Cachet uses **every** component the hackathon lists, each for a real job:
 
-| Concordium component                                   | What Cachet does with it                                                                                                                                                                                           | Where in the code                                                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| **Concordium ID (company identity) + Verify & Access** | A company proves with a **zero-knowledge proof** that it is a registered company. Only its legal name and country are revealed. The proof is bound to the signed-in account and anchored on chain (VRA/VAA).       | [`business/company-proof.ts`](apps/server/src/business/company-proof.ts), [`verify/`](apps/server/src/verify/) |
-| **Agent Registry (CIS-8004)**                          | Every AI caller is a registered agent owned by the company account, with its Agent Card hash pinned on chain. **Every seal re-checks the registry live**: switched on, still owned by the company, card unchanged. | [`agents/`](apps/server/src/agents/), [`packages/concordium`](packages/concordium/src/)                        |
-| **Verified by Concordium badge**                       | Shown on every seal page with a "check it yourself" link to Concordium's own badge checker (15 of 15 checks pass).                                                                                                 | [`v/[sealId]`](apps/web/app/v/)                                                                                |
-| **Agent Card (ERC-8004 / A2A)**                        | Each card carries the badge plus our `cachet/v1` extension: calling numbers, call purposes, "never calls" flag.                                                                                                    | [`docs/extensions/cachet-v1.md`](docs/extensions/cachet-v1.md)                                                 |
-| **x402 payments**                                      | The seal API is **x402-paid**: the AI caller pays 0.01 euro per seal (or buys credits). Cachet runs its own facilitator with `@x402/concordium` (Concordium's hosted one is a fallback).                           | [`x402/billing.ts`](apps/server/src/x402/billing.ts), [`facilitator/`](apps/server/src/facilitator/)           |
-| **Protocol-Level Tokens**                              | All money is the test digital euro **EUDemo**: seal fees and bill payments.                                                                                                                                        | [`pay/`](apps/server/src/pay/)                                                                                 |
-| **Sponsored transactions**                             | People pay bills with **zero CCD**: Cachet's sponsor pays the network fee. The recipient is always the AI caller's `agentWallet` read live from the registry, never from the call.                                 | [`pay/service.ts`](apps/server/src/pay/service.ts)                                                             |
-| **On-chain anchoring (RegisterData)**                  | Every 5 minutes, a Merkle root of new seals, closings, payments, reports and consent changes is written on chain. Anyone can check that a seal was recorded and never changed.                                     | [`worker/`](apps/server/src/worker/)                                                                           |
-| **Web3 ID (CIS-4 credential registry)**                | Cachet issues each AI caller an **"Authorised AI Caller"** credential and revokes it if the company is suspended. Seals stop at once.                                                                              | [`agents/credentials.ts`](apps/server/src/agents/credentials.ts)                                               |
-| **Message signing**                                    | Companies sign in with their wallet; AI callers sign every seal request with their own account key (Cachet never holds it).                                                                                        | [`auth/`](apps/server/src/auth/), [`packages/sdk`](packages/sdk/src/)                                          |
-| **MCP**                                                | A Cachet **MCP server** lets any MCP-capable AI agent seal its own calls, check companies and close seals. We also use the Agent Registry's hosted service for transaction builders and badge checks.              | [`packages/mcp`](packages/mcp/src/)                                                                            |
+| Concordium component                                   | What Cachet does with it                                                                                                                                                                                                                                                                                                            | Where in the code                                                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Concordium ID (company identity) + Verify & Access** | A company proves with a **zero-knowledge proof** that it is a registered company. Only its legal name and country are revealed. The proof is bound to the signed-in account and anchored on chain (VRA/VAA).                                                                                                                        | [`business/company-proof.ts`](apps/server/src/business/company-proof.ts), [`verify/`](apps/server/src/verify/) |
+| **Agent Registry (CIS-8004)**                          | Every AI caller is a registered agent owned by the company account, with its Agent Card hash pinned on chain. **Every seal re-checks the registry live**: switched on, still owned by the company, card unchanged.                                                                                                                  | [`agents/`](apps/server/src/agents/), [`packages/concordium`](packages/concordium/src/)                        |
+| **Verified by Concordium badge**                       | Shown on every seal page with a "check it yourself" link to Concordium's own badge checker (15 of 15 checks pass).                                                                                                                                                                                                                  | [`v/[sealId]`](apps/web/app/v/)                                                                                |
+| **Agent Card (ERC-8004 / A2A)**                        | Each card carries the badge plus our `cachet/v1` extension: calling numbers, call purposes, "never calls" flag.                                                                                                                                                                                                                     | [`docs/extensions/cachet-v1.md`](docs/extensions/cachet-v1.md)                                                 |
+| **x402 payments**                                      | The seal API is **x402-paid**: the AI caller pays 0.01 euro per seal (or buys credits). Cachet runs its own facilitator with `@x402/concordium` (Concordium's hosted one is a fallback).                                                                                                                                            | [`x402/billing.ts`](apps/server/src/x402/billing.ts), [`facilitator/`](apps/server/src/facilitator/)           |
+| **Protocol-Level Tokens**                              | All money is the test digital euro **EUDemo**: seal fees and bill payments.                                                                                                                                                                                                                                                         | [`pay/`](apps/server/src/pay/)                                                                                 |
+| **Sponsored transactions**                             | People pay bills with **zero CCD**: Cachet's sponsor pays the network fee. The recipient is always the AI caller's `agentWallet` read live from the registry, never from the call.                                                                                                                                                  | [`pay/service.ts`](apps/server/src/pay/service.ts)                                                             |
+| **On-chain anchoring (RegisterData)**                  | Every 5 minutes, a Merkle root of new seals, closings, payments, reports and consent changes is written on chain. Anyone can check that a seal was recorded and never changed.                                                                                                                                                      | [`worker/`](apps/server/src/worker/)                                                                           |
+| **Web3 ID (CIS-4 credential registry)**                | Cachet issues each AI caller an **"Authorised AI Caller"** credential and revokes it if the company is suspended. Seals stop at once.                                                                                                                                                                                               | [`agents/credentials.ts`](apps/server/src/agents/credentials.ts)                                               |
+| **Message signing**                                    | Companies sign in with their wallet; AI callers sign every seal request with their own account key (Cachet never holds it).                                                                                                                                                                                                         | [`auth/`](apps/server/src/auth/), [`packages/sdk`](packages/sdk/src/)                                          |
+| **MCP**                                                | A Cachet **MCP server** lets any MCP-capable AI agent seal its own calls, and lets an AI that **answers** calls verify the caller, including a direct badge check with the Agent Registry ([agents checking agents](#agents-checking-agents)). We also use the registry's hosted service for transaction builders and badge checks. | [`packages/mcp`](packages/mcp/src/)                                                                            |
 
 The person never sees any of this: no wallet is needed to check a call, and no crypto words appear in the bot.
 
@@ -202,7 +235,7 @@ Yes. It runs live at [getcachet.site](https://getcachet.site), and it has been t
 | **Red team: 1,000 simulated calls**: real calls, spoofed numbers, replayed and forged requests, expired and ended seals, a scammer calling during a real call, a switched-off AI caller, a suspended company, the wrong person, people probing others' calls, blocked companies, rule-breaking seals | **0 false greens**, 1,000 of 1,000 behaved exactly as designed ([`pnpm red-team`](apps/server/src/cli/red-team.ts))                                                           |
 | Load test: 50 seals per second for 2 minutes                                                                                                                                                                                                                                                         | 6,000 of 6,000 issued, 95% within 131 ms (laptop test setup, [`pnpm load-test`](apps/server/src/cli/load-test.ts))                                                            |
 | Card delivery to Telegram (50 runs)                                                                                                                                                                                                                                                                  | 50 of 50 delivered, 95% within 1.2 s                                                                                                                                          |
-| Automated tests                                                                                                                                                                                                                                                                                      | **471 passing** (server, SDK, MCP, Concordium helpers, seal crypto, voice)                                                                                                    |
+| Automated tests                                                                                                                                                                                                                                                                                      | **479 passing** (server, SDK, MCP, Concordium helpers, seal crypto, voice)                                                                                                    |
 | Secret scan (gitleaks, full history) and dependency audit                                                                                                                                                                                                                                            | Clean                                                                                                                                                                         |
 | Lighthouse (mobile, home page)                                                                                                                                                                                                                                                                       | Performance 94 · Accessibility 100 · Best practices 100 · SEO 100                                                                                                             |
 
@@ -297,7 +330,8 @@ await cachet.closeSeal(seal.sealId, 'completed');
 ```
 
 Or with **no code**, through the Cachet **MCP server** ([`packages/mcp`](packages/mcp/src/)): tools
-`cachet_seal_call`, `cachet_close_seal`, `cachet_check_company`, `cachet_check_seal`. Companies can also pull their
+`cachet_seal_call`, `cachet_close_seal`, `cachet_check_company`, `cachet_check_seal` and, for agents that answer
+calls, `cachet_verify_incoming_call`. Companies can also pull their
 own numbers with a **read-only API key**, invite their customers with a link and QR code, and print a **compliance
 report** (EU AI Act Art. 50 and 12, TRAI, FCC) with on-chain proof for every call.
 
@@ -354,6 +388,17 @@ docs/            architecture, path to production, deployment, Agent Card extens
 
 </details>
 
+## Why not something else?
+
+| You might ask                                                        | Answer                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Why not caller ID, "verified business" labels or network checks?** | They vouch for a **phone number**, inside one app or one country's network. Cachet vouches for the **AI agent and the company behind it**: a private proof of the company's identity, its AI caller registered on chain, a code that changes every call, and a payment that can only reach the company's registered wallet. It works across countries and for calls made over the internet. |
+| **Why not the bank's own app?**                                      | It covers one bank. People get calls from their bank, their energy company, their courier and their phone company: Cachet is **one place for all of them**, and companies without an app can use it too.                                                                                                                                                                                    |
+| **It only protects people who joined.**                              | True, so joining is made easy: under 30 seconds in Telegram, nothing to install. Companies invite **their own customers** (link, QR code, ready-made SMS and email), families protect their parents with `/family`, and an AI assistant answering for someone can check calls even if that person never joined ([agents checking agents](#agents-checking-agents)).                         |
+| **Isn't Cachet just a trusted middleman?**                           | Anyone can check a seal **without trusting Cachet**: the seal signature with the public key, the company proof and the AI caller in the Agent Registry on chain, and every seal in the on-chain record (`pnpm anchor:verify`).                                                                                                                                                              |
+| **Why Telegram?**                                                    | Free bots and mini apps, no install, works on any phone. WhatsApp and an Android app that warns on incoming calls are next.                                                                                                                                                                                                                                                                 |
+| **What stops a bad company?**                                        | Every seal is paid and signed. People can report and block. Enough reports suspend the company automatically: its open calls end, new seals are refused and its credential is revoked on chain.                                                                                                                                                                                             |
+
 ## What is not done yet
 
 Honest limits of this testnet prototype:
@@ -367,3 +412,7 @@ Honest limits of this testnet prototype:
 ## Author
 
 Built by **Prashant Mishra** ([@Prashant-Mishra-12569](https://github.com/Prashant-Mishra-12569)).
+
+## License
+
+[MIT](LICENSE) © 2026 Prashant Mishra

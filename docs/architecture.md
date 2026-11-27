@@ -13,7 +13,7 @@ This page explains how Cachet works inside, for judges and developers. For the s
 | **Concordium helpers** | gRPC client, Agent Registry reads and transactions, sponsored token transfers, credential registry, transaction sender       | [`packages/concordium`](../packages/concordium/src/)       |
 | **Database**           | PostgreSQL with Drizzle (13 tables, 14 migrations) and Redis (sessions, one-time values, rate limits, live events)           | [`packages/db`](../packages/db/)                           |
 | **SDK**                | `@cachet/sdk` for AI callers: seal a call, close it, pay with x402                                                           | [`packages/sdk`](../packages/sdk/src/)                     |
-| **MCP server**         | Lets any MCP-capable AI agent seal its own calls                                                                             | [`packages/mcp`](../packages/mcp/src/)                     |
+| **MCP server**         | Lets any MCP-capable AI agent seal its own calls, and an AI that answers calls verify the caller (receptionist mode, no key) | [`packages/mcp`](../packages/mcp/src/)                     |
 | **Verifier**           | Concordium's credential verification service (Docker), checks companies' zero-knowledge proofs                               | [`infra/verifier`](../infra/verifier/)                     |
 
 Live: the server, verifier, Postgres and Redis run on Railway; the website runs on Vercel at
@@ -189,14 +189,15 @@ The company sees only totals of reports per kind, never which call was reported,
 
 ## 11. Limits that protect people and Cachet
 
-| Where                          | Limit                                                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Seal API                       | 60 requests per second per IP; forged, replayed or unknown requests: 300 per 10 minutes per IP |
-| Sign-in                        | One-time challenges (5 minutes), 30 per 10 minutes per visitor                                 |
-| Company proofs (they cost CCD) | 5 per 10 minutes per account, 10 per visitor                                                   |
-| Bill payments                  | One payment in flight per bill, at most 5 tries per bill per hour                              |
-| Mini App                       | Per visitor and per person; reports once per call                                              |
-| Data API                       | 120 requests per 10 minutes per company                                                        |
+| Where                              | Limit                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Seal API                           | 60 requests per second per IP; forged, replayed or unknown requests: 300 per 10 minutes per IP |
+| Sign-in                            | One-time challenges (5 minutes), 30 per 10 minutes per visitor                                 |
+| Company proofs (they cost CCD)     | 5 per 10 minutes per account, 10 per visitor                                                   |
+| Bill payments                      | One payment in flight per bill, at most 5 tries per bill per hour                              |
+| Mini App                           | Per visitor and per person; reports once per call                                              |
+| Call verification (agent to agent) | 10 tries per answered number and 60 per visitor per 10 minutes                                 |
+| Data API                           | 120 requests per 10 minutes per company                                                        |
 
 Behind the website, the visitor's real IP is passed with a secret shared by the website and the server, so one visitor
 can't use up everyone's limits.

@@ -44,6 +44,10 @@ function Code({ children, label }: { children: string; label?: string }) {
   );
 }
 
+function H3({ children }: { children: ReactNode }) {
+  return <h3 className="mt-8 text-[19px] leading-snug font-semibold">{children}</h3>;
+}
+
 function H2({ id, children }: { id: string; children: ReactNode }) {
   return (
     <h2
@@ -427,7 +431,31 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
             <li>
               <C>cachet_check_seal</C>: what Cachet checked for one seal.
             </li>
+            <li>
+              <C>cachet_verify_incoming_call</C>: for an AI that <strong className="text-ink">answers</strong>{' '}
+              calls. See below.
+            </li>
           </ul>
+
+          <H3>Agents checking agents: an AI receptionist verifies the caller</H3>
+          <P>
+            An AI that answers calls (a company&apos;s receptionist, or a person&apos;s own AI assistant) can
+            check an AI caller before trusting it. The caller says its code first; the receptionist calls{' '}
+            <C>cachet_verify_incoming_call</C> with the number it answers for and that code. Cachet confirms a
+            sealed call to that number with that code is open right now, and the tool then checks the
+            caller&apos;s badge{' '}
+            <strong className="text-ink">directly with Concordium&apos;s Agent Registry</strong>, without
+            trusting Cachet. Only if both pass is the caller verified. It also protects people who never
+            joined Cachet on Telegram, because their assistant checks for them.
+          </P>
+          <P>
+            Without an AI caller key the MCP server runs in{' '}
+            <strong className="text-ink">receptionist mode</strong>: it verifies and checks, but can never
+            seal. The tool uses <C>POST /v1/calls/verify</C>{' '}
+            <C>{'{ "to": "+31612345678", "code": "47-21" }'}</C>, which answers{' '}
+            <C>{'{ "verified": false }'}</C> for any mismatch (never which part), never returns the code or a
+            number, and allows 10 tries per number per 10 minutes.
+          </P>
           <Code label="Your MCP client's settings (the usual mcpServers format)">{`
 {
   "mcpServers": {
@@ -445,7 +473,8 @@ on chain          = RegisterData( "CACHET1" || root )               // 39 bytes
 }`}</Code>
           <P>
             The key file never leaves your machine. To see it work, run <C>pnpm mcp:example +31612345678</C>:
-            an example agent connects, checks a company, seals, checks the seal and closes it.
+            a caller agent checks a company, seals, checks the seal and closes it, and a separate receptionist
+            agent (no key) verifies the real code and refuses a guessed one.
           </P>
 
           <H2 id="data-api">Read your data (API)</H2>
