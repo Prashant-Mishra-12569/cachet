@@ -48,11 +48,14 @@ only accepts sign-in requests from `WEB_ORIGIN` (`https://getcachet.site`).
 | `VERIFIER_URL`                                                                                                                                                                                                         | `http://${{verifier.RAILWAY_PRIVATE_DOMAIN}}:8000`                                                                        |
 | `VERIFIER_HEALTH_URL`                                                                                                                                                                                                  | `http://${{verifier.RAILWAY_PRIVATE_DOMAIN}}:8001/health`                                                                 |
 | `CCD_SPONSOR_KEY_B64`                                                                                                                                                                                                  | the sponsor account's wallet export, base64 (secret)                                                                      |
+| `CACHET_PROXY_SECRET`                                                                                                                                                                                                  | secret shared with the website (Vercel): **the same value in both**, so rate limits count each visitor                    |
+| `W3ID_REGISTRY`                                                                                                                                                                                                        | `<13167,0>` (the Authorised AI Caller credential registry)                                                                |
+| `OPERATOR_TELEGRAM_CHAT_ID`, `SPONSOR_LOW_CCD`                                                                                                                                                                         | optional: your Telegram chat id for sponsor low-balance alerts, and the alert level (default 1000 CCD)                    |
 | `TELEGRAM_BOT_TOKEN`, `GIST_TOKEN`                                                                                                                                                                                     | secrets                                                                                                                   |
 | `SEAL_SIGNING_KEY`, `CALL_CODE_SECRET`, `PHONE_PEPPER`, `PHONE_ENC_KEY`, `SESSION_SECRET`                                                                                                                              | **the same values as the database they serve** (phone fingerprints, encrypted numbers and seal signatures depend on them) |
 | account addresses (`CCD_*_ADDRESS`, `CACHET_TREASURY_ADDRESS`), `CCD_NETWORK`, `PLT_TOKEN_ID`, `PLT_DECIMALS`, `COMPANY_ID_ISSUERS`, `AGENT_REGISTRY_API`, `X402_FACILITATOR`, `SEAL_PRICE`, `ANCHOR_INTERVAL_SECONDS` | public settings, see `.env.example`                                                                                       |
 
-Shortcut: `pnpm deploy:env server` (or `verifier`) builds these from the local `.env` and copies
+Shortcut: `pnpm deploy:env server` (or `verifier`, or `web` for Vercel) builds these from the local `.env` and copies
 them to the clipboard without printing them; paste into the service's **Variables → Raw Editor**.
 
 Key files are never uploaded. To put a wallet export into a variable, base64 it on your own machine and
@@ -73,13 +76,14 @@ pnpm db:copy
 Import the GitHub repo, **Root Directory** `apps/web`, Node.js 24. `apps/web/vercel.json` sets the
 install and build commands.
 
-| Variable                            | Value                                         |
-| ----------------------------------- | --------------------------------------------- |
-| `API_URL`                           | `https://api.getcachet.site`                  |
-| `NEXT_PUBLIC_CCD_NETWORK`           | `testnet`                                     |
-| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | the bot's username                            |
-| `WALLETCONNECT_PROJECT_ID`          | the WalletConnect (Reown) project id (public) |
-| `ENABLE_EXPERIMENTAL_COREPACK`      | `1` (uses the repo's pnpm version)            |
+| Variable                            | Value                                                             |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `API_URL`                           | `https://api.getcachet.site`                                      |
+| `NEXT_PUBLIC_CCD_NETWORK`           | `testnet`                                                         |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | the bot's username                                                |
+| `WALLETCONNECT_PROJECT_ID`          | the WalletConnect (Reown) project id (public)                     |
+| `ENABLE_EXPERIMENTAL_COREPACK`      | `1` (uses the repo's pnpm version)                                |
+| `CACHET_PROXY_SECRET`               | the same value as on the server (`pnpm deploy:env web` copies it) |
 
 ## 4. Domains (DNS at the registrar)
 
@@ -88,7 +92,10 @@ install and build commands.
 
 ## 5. After the first deploy
 
-- `https://api.getcachet.site/healthz` → `"database":"ok","redis":"ok","verifier":"ok"`.
+- `https://api.getcachet.site/healthz` → `"database":"ok","redis":"ok","verifier":"ok","sponsor":"ok"`.
 - The bot runs on Railway now. A second copy with the same token (e.g. a local `pnpm dev`) makes
   Telegram refuse one of them: leave `TELEGRAM_BOT_TOKEN` empty locally, or use a separate dev bot.
 - Command-line tools target the live API with `CACHET_API_URL=https://api.getcachet.site`.
+- Local testing next to the live bot: `TELEGRAM_BOT_OFF=true` keeps the Mini App API without running the bot (use a
+  made-up local token), and keep `W3ID_REGISTRY` empty locally, so a local test can never revoke the real credential.
+- New secrets: `pnpm gen-secrets` adds any missing one to `.env` (it never overwrites or prints them).
