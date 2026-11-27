@@ -4,6 +4,14 @@
   "private": true,
   "description": "Cachet: the seal on every AI call.",
   "author": "Prashant Mishra",
+  "homepage": "https://getcachet.site",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Prashant-Mishra-12569/cachet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Prashant-Mishra-12569/cachet/issues"
+  },
   "license": "UNLICENSED",
   "packageManager": "pnpm@12.21.0",
   "engines": {
