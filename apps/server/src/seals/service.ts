@@ -472,6 +472,29 @@ export function createSealService(deps: SealServiceDeps) {
       return endRows(await deps.seals.openForBusiness(businessId, now), reason, now);
     },
 
+    /**
+     * Agent-to-agent check: an AI answering a call (a receptionist, a person's own AI assistant) asks
+     * "is there a verified call to MY number with the code the caller just said?". Only an exact match
+     * of number + open seal + code answers yes; anything else is a plain "no" (never which part failed).
+     */
+    /** The keyed fingerprint of a number (never reversible without Cachet's secret). */
+    fingerprint: (e164: string) => phoneHash(deps.phonePepper, e164),
+
+    async verifyIncoming(toRaw: string, spokenCode: string) {
+      const to = normalizeE164(toRaw);
+      const code = spokenCode.replace(/\D/g, '');
+      if (!to || code.length !== 4) return null;
+      const open = await deps.seals.openForPhone(phoneHash(deps.phonePepper, to), new Date(nowMs()));
+      const row = open.find((r) => r.code === code);
+      if (!row) return null;
+      const view = await viewOf(row);
+      // The caller must still be live on Concordium and its company in good standing right now.
+      if (view.status !== 'open' || view.agent.onChain !== 'active' || view.company.status !== 'active') {
+        return null;
+      }
+      return view;
+    },
+
     /** Public, share-safe view: no phone data, no call code. */
     async publicView(id: string) {
       const row = await deps.seals.get(id);

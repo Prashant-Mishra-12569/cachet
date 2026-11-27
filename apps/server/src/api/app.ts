@@ -23,6 +23,7 @@ import type { CompanyDirectory } from '../business/companies';
 import type { RiskEngine } from '../business/risk';
 import type { ApiKeys } from '../business/api-keys';
 import { dataRoutes } from './routes/data';
+import { verifyCallRoutes } from './routes/verify-call';
 import { rateLimit, trustWebsiteProxy } from './middleware';
 import { errText } from '../infra/err-text';
 
@@ -124,6 +125,8 @@ export function createApp(deps: AppDeps) {
   }
   app.route('/v1/agents', agentRoutes(deps));
   app.route('/v1/seals', sealRoutes({ ...deps, billing: deps.x402 }));
+  // Agent-to-agent: an AI answering a call checks the caller's seal with the code it heard.
+  app.route('/v1/calls', verifyCallRoutes(deps));
   if (deps.x402) app.route('/v1/credits', creditRoutes({ ...deps, billing: deps.x402.billing }));
   if (deps.miniApp) {
     app.route('/v1/tg', miniAppRoutes({ ...deps, ...deps.miniApp }));
