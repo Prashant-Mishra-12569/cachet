@@ -67,6 +67,19 @@ const b64File = (name) => {
 };
 
 const which = process.argv[2];
+
+// One value only (for adding a single variable by hand): `pnpm deploy:env value CACHET_PROXY_SECRET`.
+if (which === 'value') {
+  const name = process.argv[3] ?? '';
+  const value = env[name]?.trim();
+  if (!/^[A-Z][A-Z0-9_]*$/.test(name) || !value)
+    fail(`${name || 'That variable'} is empty or missing in .env.`);
+  if (process.platform !== 'win32') fail('Clipboard copy is set up for Windows (clip.exe) only.');
+  if (spawnSync('clip', { input: value }).status !== 0) fail('Could not copy to the clipboard.');
+  console.log(`✓ The value of ${name} is on your clipboard (not shown). Paste it as the value of ${name}.`);
+  process.exit(0);
+}
+
 const vars = new Map();
 if (which === 'server') {
   for (const name of SERVER_FROM_ENV) if (env[name]?.trim()) vars.set(name, env[name].trim());
@@ -104,7 +117,7 @@ if (which === 'server') {
     env.VERIFIER_NODE_GRPC_ENDPOINT?.trim() || 'https://grpc.testnet.concordium.com:20000',
   );
 } else {
-  fail('usage: pnpm deploy:env server|verifier|web');
+  fail('usage: pnpm deploy:env server|verifier|web, or: pnpm deploy:env value <NAME>');
 }
 
 const block = [...vars].map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
