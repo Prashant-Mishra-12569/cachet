@@ -18,6 +18,8 @@ const SEAL: Seal = {
   x402Tx: null,
 };
 
+const registryBadgeValid = { value: true };
+
 async function connect(over: Partial<CachetMcpDeps> = {}) {
   const calls: { sealCall: unknown[]; closeSeal: unknown[]; http: string[] } = {
     sealCall: [],
@@ -38,8 +40,27 @@ async function connect(over: Partial<CachetMcpDeps> = {}) {
     apiBase: 'https://api.test/',
     callerId: '+918035735856',
     token: 'EUDemo',
-    http: (async (url: string) => {
+    http: (async (url: string, init?: RequestInit) => {
       calls.http.push(url);
+      if (url.endsWith('/v1/calls/verify')) {
+        const { to, code } = JSON.parse(String(init?.body)) as { to: string; code: string };
+        return to === '+31612345678' && code.replace(/\D/g, '') === '4721'
+          ? Response.json({
+              verified: true,
+              seal: {
+                company: { legalName: 'Northwind Energy BV', legalCountry: 'NL' },
+                agent: {
+                  name: 'Northwind billing assistant',
+                  badge: 'ccd:4221332d34e1694168c2a0c0b3fd0f27/cis-2:JyP9UD2cnf5bw2YzH1GTX',
+                },
+                purpose: 'billing',
+                message: 'Your November bill is ready',
+                publicUrl: `https://getcachet.site/v/${SEAL_ID}`,
+              },
+            })
+          : Response.json({ verified: false });
+      }
+      if (url.includes('/v1/check-badge/')) return Response.json({ badge_valid: registryBadgeValid.value });
       if (url.includes('/v1/companies')) {
         const q = new URL(url).searchParams.get('query') ?? '';
         const companies = /demo/i.test(q)
@@ -102,7 +123,7 @@ async function connect(over: Partial<CachetMcpDeps> = {}) {
 }
 
 describe('Cachet MCP server', () => {
-  it('offers the four tools, with read-only hints on the checks', async () => {
+  it('offers the five tools, with read-only hints on the checks', async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
@@ -111,6 +132,7 @@ describe('Cachet MCP server', () => {
       'cachet_check_seal',
       'cachet_close_seal',
       'cachet_seal_call',
+      'cachet_verify_incoming_call',
     ]);
     expect(byName['cachet_check_company']?.annotations?.readOnlyHint).toBe(true);
     expect(byName['cachet_seal_call']?.description).toContain('very first sentence');
@@ -204,5 +226,52 @@ describe('Cachet MCP server', () => {
     const missing = await call('cachet_check_seal', { sealId: '01M89AG58PVJW8PJ5RQMP23PXB' });
     expect(missing.isError).toBe(true);
     expect(missing.text).toContain("don't trust it");
+  });
+});
+
+describe('agent-to-agent: an AI that answers calls verifies the caller', () => {
+  it('right number + spoken code: VERIFIED, and the badge is checked with Concordium directly', async () => {
+    registryBadgeValid.value = true;
+    const { call, calls } = await connect();
+    const r = await call('cachet_verify_incoming_call', {
+      to: '+31612345678',
+      code: 'four seven 4 7 2 1'.replace(/[a-z ]/g, ''),
+    });
+    expect(r.isError).toBeFalsy();
+    expect(r.text).toContain('VERIFIED');
+    expect(r.structuredContent).toMatchObject({
+      verified: true,
+      company: 'Northwind Energy BV',
+      badge: 'JyP9UD2cnf5bw2YzH1GTX',
+      badgeValidOnConcordium: true,
+    });
+    expect(calls.http).toContain(
+      'https://agent-registry-mcp.concordium.com/v1/check-badge/JyP9UD2cnf5bw2YzH1GTX',
+    );
+  });
+
+  it('wrong code or wrong number: NOT VERIFIED, treat as a scam', async () => {
+    const { call } = await connect();
+    const r = await call('cachet_verify_incoming_call', { to: '+31612345678', code: '12-34' });
+    expect(r.text).toContain('NOT VERIFIED');
+    expect(r.structuredContent?.['verified']).toBe(false);
+  });
+
+  it("Cachet says yes but Concordium's registry says the badge is not valid: NOT VERIFIED", async () => {
+    registryBadgeValid.value = false;
+    const { call } = await connect();
+    const r = await call('cachet_verify_incoming_call', { to: '+31612345678', code: '47-21' });
+    expect(r.structuredContent?.['verified']).toBe(false);
+    expect(r.text).toContain("Agent Registry says the caller's badge is not valid");
+    registryBadgeValid.value = true;
+  });
+
+  it('receptionist mode (no AI caller key): verifies and checks, but never seals', async () => {
+    const { call } = await connect({ cachet: undefined });
+    const sealed = await call('cachet_seal_call', { to: '+31612345678', purpose: 'billing', message: 'x' });
+    expect(sealed.isError).toBe(true);
+    expect(sealed.text).toContain('receptionist mode');
+    const r = await call('cachet_verify_incoming_call', { to: '+31612345678', code: '47-21' });
+    expect(r.structuredContent?.['verified']).toBe(true);
   });
 });

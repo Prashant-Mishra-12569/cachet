@@ -2,6 +2,10 @@
  * Run the Cachet MCP server over stdio (how desktop MCP clients start local tools).
  *
  * Settings (environment, or the repo's .env):
+ * Receptionist mode (an AI that ANSWERS calls): set nothing below except CACHET_API_URL if needed; the
+ * server then only verifies incoming callers (cachet_verify_incoming_call) and checks companies and seals.
+ *
+ * AI caller mode (an AI that MAKES calls):
  *   CACHET_AGENT_BADGE     your AI caller's Verified-by-Concordium badge
  *   CCD_AGENT_ADDRESS      the AI's own Concordium account
  *   CCD_AGENT_KEY_PATH     its wallet export (stays on this machine; Cachet never sees it)
@@ -35,40 +39,48 @@ async function main() {
   const net = process.env['CCD_NETWORK'] ?? 'testnet';
   if (!isNetwork(net)) throw new Error(`CCD_NETWORK must be testnet or mainnet, not ${net}`);
 
-  const key = await loadAccountKey({
-    path: need('CCD_AGENT_KEY_PATH'),
-    expectedAddress: need('CCD_AGENT_ADDRESS'),
-    network: net,
-    forbiddenDir: REPO_ROOT,
-  });
-  const token = process.env['PLT_TOKEN_ID'] ?? 'EUDemo';
-  const payingFetch = createPayingFetch({
-    network: NETWORK_CONFIG[net].caip2,
-    account: key.address,
-    signer: key.signer,
-    token,
-    decimals: Number(process.env['PLT_DECIMALS'] ?? '6'),
-    maxPerPayment: process.env['CACHET_MAX_PAYMENT'] ?? '0.05',
-  });
   const apiBase = process.env['CACHET_API_URL']?.trim() || 'https://api.getcachet.site';
-  const cachet = createCachetClient({
-    baseUrl: apiBase,
-    badge: need('CACHET_AGENT_BADGE'),
-    account: key.address.address,
-    signer: key.signer,
-    fetch: payingFetch,
-  });
+  const token = process.env['PLT_TOKEN_ID'] ?? 'EUDemo';
+  // No AI caller key = receptionist mode: verify incoming callers and check companies, but never seal.
+  const keyPath = process.env['CCD_AGENT_KEY_PATH']?.trim();
+  let cachet: ReturnType<typeof createCachetClient> | undefined;
+  let who = 'receptionist mode (verifies callers, does not seal)';
+  if (keyPath) {
+    const key = await loadAccountKey({
+      path: keyPath,
+      expectedAddress: need('CCD_AGENT_ADDRESS'),
+      network: net,
+      forbiddenDir: REPO_ROOT,
+    });
+    const payingFetch = createPayingFetch({
+      network: NETWORK_CONFIG[net].caip2,
+      account: key.address,
+      signer: key.signer,
+      token,
+      decimals: Number(process.env['PLT_DECIMALS'] ?? '6'),
+      maxPerPayment: process.env['CACHET_MAX_PAYMENT'] ?? '0.05',
+    });
+    cachet = createCachetClient({
+      baseUrl: apiBase,
+      badge: need('CACHET_AGENT_BADGE'),
+      account: key.address.address,
+      signer: key.signer,
+      fetch: payingFetch,
+    });
+    who = `AI caller ${key.address.address.slice(0, 8)}…`;
+  }
 
   const server = createCachetMcpServer({
     cachet,
     apiBase,
     callerId: process.env['CACHET_CALLER_ID']?.trim() || process.env['VOICE_CALLER_ID']?.trim(),
     token,
+    ...(process.env['AGENT_REGISTRY_API']?.trim()
+      ? { registryBase: process.env['AGENT_REGISTRY_API'].trim() }
+      : {}),
   });
   await server.connect(new StdioServerTransport());
-  console.error(
-    `[cachet-mcp] ready on stdio · API ${apiBase} · AI caller ${key.address.address.slice(0, 8)}…`,
-  );
+  console.error(`[cachet-mcp] ready on stdio · API ${apiBase} · ${who}`);
 }
 
 main().catch((err: unknown) => {

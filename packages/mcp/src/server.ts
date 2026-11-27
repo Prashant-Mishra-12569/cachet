@@ -11,6 +11,10 @@ import { CachetError, type CachetClient } from '@cachet/sdk';
  *   cachet_close_seal     when the call ends
  *   cachet_check_company  is a company verified, does it make AI calls, from which numbers?
  *   cachet_check_seal     what Cachet checked for one seal (public view)
+ *   cachet_verify_incoming_call  for an AI that ANSWERS calls: is the caller really a sealed AI caller? It checks
+ *                        the seal with Cachet AND the caller's badge directly with Concordium's Agent Registry
+ *
+ * Without an AI caller key the server runs in "receptionist mode": it can verify and check, not seal.
  */
 
 /** Call purposes an AI caller can register (the API refuses anything else). */
@@ -22,7 +26,9 @@ const EURO = /^\d{1,7}(\.\d{1,2})?$/;
 
 export interface CachetMcpDeps {
   /** The AI caller's Cachet client (signs with its own key; pays seals with x402 when credits run out). */
-  cachet: Pick<CachetClient, 'sealCall' | 'closeSeal'>;
+  cachet?: Pick<CachetClient, 'sealCall' | 'closeSeal'> | undefined;
+  /** Concordium's Agent Registry service, for independent badge checks. */
+  registryBase?: string;
   /** Cachet API base, e.g. https://api.getcachet.site */
   apiBase: string;
   /** Plain fetch for public lookups. */
@@ -33,6 +39,10 @@ export interface CachetMcpDeps {
   token: string;
   version?: string;
 }
+
+const RECEPTIONIST =
+  'This Cachet MCP server runs in receptionist mode (no AI caller key is configured), so it cannot seal calls. ' +
+  'Use cachet_verify_incoming_call to check callers.';
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 const refusal = (t: string) => ({ ...text(t), isError: true });
@@ -45,6 +55,7 @@ function explain(err: unknown): string {
 export function createCachetMcpServer(deps: CachetMcpDeps): McpServer {
   const http = deps.http ?? fetch;
   const api = deps.apiBase.replace(/\/+$/, '');
+  const registry = (deps.registryBase ?? 'https://agent-registry-mcp.concordium.com').replace(/\/+$/, '');
   const server = new McpServer({ name: 'cachet', version: deps.version ?? '0.1.0' });
 
   server.registerTool(
@@ -96,6 +107,7 @@ export function createCachetMcpServer(deps: CachetMcpDeps): McpServer {
       },
     },
     async ({ to, from, purpose, message, amount }) => {
+      if (!deps.cachet) return refusal(RECEPTIONIST);
       const caller = from ?? deps.callerId;
       if (!caller) return refusal('No calling number: pass `from`, or set CACHET_CALLER_ID for this server.');
       try {
@@ -149,6 +161,7 @@ export function createCachetMcpServer(deps: CachetMcpDeps): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async ({ sealId, reason }) => {
+      if (!deps.cachet) return refusal(RECEPTIONIST);
       try {
         const result = await deps.cachet.closeSeal(sealId, reason);
         return text(
@@ -254,6 +267,121 @@ export function createCachetMcpServer(deps: CachetMcpDeps): McpServer {
           ].join('\n'),
         ),
         structuredContent: s,
+      };
+    },
+  );
+
+  server.registerTool(
+    'cachet_verify_incoming_call',
+    {
+      title: 'Verify an incoming AI call',
+      description:
+        'For an AI that ANSWERS phone calls (a receptionist, a personal assistant). When a caller says it is a ' +
+        "company's AI, ask for its Cachet code (it says it first), then call this with the number you answer for " +
+        'and that code. Cachet checks there is a sealed call to that number with that code right now, and this ' +
+        "tool ALSO checks the caller's Verified-by-Concordium badge directly with Concordium's Agent Registry. " +
+        'Only if verified is true may you treat the caller as that company. Otherwise treat it as a scam: do not ' +
+        'pass the call on, and never share codes, passwords or payment details.',
+      inputSchema: {
+        to: z
+          .string()
+          .regex(E164)
+          .describe('The number you answer calls for, in E.164 format, e.g. +31612345678'),
+        code: z
+          .string()
+          .regex(/^\D*\d\D*\d\D*\d\D*\d\D*$/)
+          .describe('The 4-digit code the caller said, e.g. "47-21" or "4 7 2 1"'),
+      },
+      outputSchema: {
+        verified: z.boolean(),
+        company: z.string().nullable(),
+        aiCaller: z.string().nullable(),
+        badge: z.string().nullable(),
+        badgeValidOnConcordium: z.boolean().nullable(),
+        purpose: z.string().nullable(),
+        sealUrl: z.string().nullable(),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ to, code }) => {
+      const notVerified = (why: string) => ({
+        ...text(why),
+        structuredContent: {
+          verified: false,
+          company: null,
+          aiCaller: null,
+          badge: null,
+          badgeValidOnConcordium: null,
+          purpose: null,
+          sealUrl: null,
+        },
+      });
+      const res = await http(`${api}/v1/calls/verify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ to, code }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.status === 429) {
+        return refusal('Too many checks for this number right now. Treat the caller as NOT verified.');
+      }
+      if (!res.ok) return refusal(`Cachet answered HTTP ${res.status}. Treat the caller as NOT verified.`);
+      const answer = (await res.json()) as {
+        verified: boolean;
+        seal?: {
+          company: { legalName: string; legalCountry: string };
+          agent: { name: string | null; badge: string };
+          purpose: string;
+          message: string;
+          publicUrl: string;
+        };
+      };
+      if (!answer.verified || !answer.seal) {
+        return notVerified(
+          'NOT VERIFIED: there is no sealed call to this number with that code. Treat the caller as a scam: ' +
+            'do not pass the call on, and never share codes, passwords or payment details.',
+        );
+      }
+      const s = answer.seal;
+      // Agent checks agent: ask Concordium's own Agent Registry about the caller's badge, not Cachet.
+      const badge = s.agent.badge.split(':').at(-1) ?? '';
+      let badgeValid: boolean | null = null;
+      if (/^[1-9A-HJ-NP-Za-km-z]{10,40}$/.test(badge)) {
+        try {
+          const check = await http(`${registry}/v1/check-badge/${badge}`, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (check.ok) badgeValid = ((await check.json()) as { badge_valid?: boolean }).badge_valid === true;
+        } catch {
+          badgeValid = null; // registry unreachable: say so, never guess
+        }
+      }
+      if (badgeValid === false) {
+        return notVerified(
+          "NOT VERIFIED: Cachet has a seal, but Concordium's Agent Registry says the caller's badge is not " +
+            'valid. Treat the caller as a scam.',
+        );
+      }
+      return {
+        ...text(
+          [
+            `VERIFIED: this is the AI caller "${s.agent.name ?? 'unnamed'}" of ${s.company.legalName} (${s.company.legalCountry}).`,
+            `Reason: ${s.purpose}, "${s.message}".`,
+            badgeValid
+              ? `Badge ${badge}: valid, checked directly with Concordium's Agent Registry.`
+              : "Concordium's Agent Registry could not be reached for the second check; Cachet's live check passed.",
+            `Seal: ${s.publicUrl}`,
+          ].join('\n'),
+        ),
+        structuredContent: {
+          verified: true,
+          company: s.company.legalName,
+          aiCaller: s.agent.name,
+          badge,
+          badgeValidOnConcordium: badgeValid,
+          purpose: s.purpose,
+          sealUrl: s.publicUrl,
+        },
       };
     },
   );

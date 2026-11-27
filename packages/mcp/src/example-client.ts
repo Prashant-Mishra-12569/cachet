@@ -1,6 +1,8 @@
 /**
- * An MCP client using Cachet like any AI agent would: it starts the Cachet MCP server over stdio,
- * lists its tools, checks a company, seals a call, checks the seal, and closes it.
+ * Two AI agents using Cachet over MCP, like real agents would:
+ *  - the CALLER (a company's AI) checks a company, seals a call, and closes it at the end;
+ *  - the RECEPTIONIST (an AI answering calls for that number, with no Cachet key at all) hears the code
+ *    and verifies the caller: with Cachet, and the caller's badge directly with Concordium's Agent Registry.
  *
  *   pnpm --filter @cachet/mcp example +919336124858
  *
@@ -25,21 +27,29 @@ async function main() {
     return;
   }
 
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ['--import', 'tsx', fileURLToPath(new URL('./index.ts', import.meta.url))],
-    env: Object.fromEntries(
-      Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
-    ),
-    stderr: 'inherit',
-  });
-  const client = new Client({ name: 'cachet-example-agent', version: '1.0.0' });
-  await client.connect(transport);
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+  );
+  const start = async (name: string, extra: Record<string, string> = {}) => {
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', 'tsx', fileURLToPath(new URL('./index.ts', import.meta.url))],
+      env: { ...env, ...extra },
+      stderr: 'inherit',
+    });
+    const c = new Client({ name, version: '1.0.0' });
+    await c.connect(transport);
+    return c;
+  };
+  const client = await start('caller-agent');
+  // No AI caller key: the receptionist can only verify, never seal.
+  const receptionist = await start('receptionist-agent', { CCD_AGENT_KEY_PATH: '', CACHET_AGENT_BADGE: '' });
 
-  const call = async (name: string, args: Record<string, unknown>) => {
-    const r = (await client.callTool({ name, arguments: args })) as ToolResult;
+  const call = async (name: string, args: Record<string, unknown>, who = client) => {
+    const r = (await who.callTool({ name, arguments: args })) as ToolResult;
     const text = r.content.map((c) => c.text ?? '').join('\n');
-    console.log(`\n→ ${name} ${JSON.stringify(args)}\n${r.isError ? '✗' : '✓'} ${text}`);
+    const role = who === client ? 'caller' : 'receptionist';
+    console.log(`\n[${role}] → ${name} ${JSON.stringify(args)}\n${r.isError ? '✗' : '✓'} ${text}`);
     return r;
   };
 
@@ -59,10 +69,16 @@ async function main() {
       return;
     }
     await call('cachet_check_seal', { sealId });
+    // The receptionist hears the code the caller says first and verifies it, then a scammer's guess.
+    const heard = String(sealed.structuredContent?.['code'] ?? '');
+    await call('cachet_verify_incoming_call', { to, code: heard }, receptionist);
+    const guess = heard === '12-34' ? '43-21' : '12-34';
+    await call('cachet_verify_incoming_call', { to, code: guess }, receptionist);
     await call('cachet_close_seal', { sealId, reason: 'cancelled' });
     console.log(`\nDone. Public page of this seal: ${String(sealed.structuredContent?.['verifyUrl'])}`);
   } finally {
     await client.close();
+    await receptionist.close();
   }
 }
 
