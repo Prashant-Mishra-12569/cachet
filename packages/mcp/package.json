@@ -1,6 +1,8 @@
 {
   "name": "@cachet/mcp",
   "version": "0.0.0",
+  "license": "MIT",
+  "author": "Prashant Mishra",
   "private": true,
   "type": "module",
   "description": "Cachet MCP server: lets any MCP-capable AI agent seal its phone calls.",

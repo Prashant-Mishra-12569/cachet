@@ -12,7 +12,7 @@
   "bugs": {
     "url": "https://github.com/Prashant-Mishra-12569/cachet/issues"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=24"
