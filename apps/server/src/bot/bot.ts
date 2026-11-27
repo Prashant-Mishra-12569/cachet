@@ -304,15 +304,31 @@ export async function startBotPolling(
   // Don't await: start() resolves only when the bot stops.
   // Keep messages that arrived while the server was restarting: dropping them would silently
   // swallow a person's /check during a scam call.
-  bot.start({ drop_pending_updates: false }).catch((err: unknown) => {
-    const conflict = (err as { error_code?: number } | null)?.error_code === 409;
-    console.error(
-      conflict
-        ? '[bot] stopped: another copy of this bot is already running (two "pnpm dev"?). Stop the other one.'
-        : '[bot] stopped with an error:',
-      conflict ? '' : errText(err),
-    );
-  });
+  //
+  // Never give up: during a redeploy the new server starts while the old one is still polling, and
+  // Telegram refuses a second copy (409) for those few seconds. Giving up then left NO bot running
+  // once the old copy stopped. So retry, waiting a little longer each time (5 s up to 60 s).
+  let wait = 5_000;
+  const run = (): void => {
+    bot
+      .start({
+        drop_pending_updates: false,
+        onStart: () => {
+          wait = 5_000;
+        },
+      })
+      .catch((err: unknown) => {
+        const conflict = (err as { error_code?: number } | null)?.error_code === 409;
+        console.error(
+          conflict
+            ? `[bot] another copy of this bot is polling (normal for a few seconds during a redeploy; or a second "pnpm dev"). Retrying in ${wait / 1000} s.`
+            : `[bot] polling stopped with an error: ${errText(err)}. Retrying in ${wait / 1000} s.`,
+        );
+        setTimeout(run, wait).unref();
+        wait = Math.min(wait * 2, 60_000);
+      });
+  };
+  run();
 }
 
 /** A company name typed by a person: one line, no control characters, at most 60 characters. */
